@@ -41,6 +41,8 @@ features = ["std", "block2", "WKWebView", "WKSnapshotConfiguration"]
 
 [target.'cfg(target_os = "linux")'.dependencies]
 webkit2gtk = "=2.0.2"
+gtk = "=0.18.2"
+gtk-layer-shell = { version = "=0.8.2", features = ["v0_6"] }
 gio = "=0.18.4"
 cairo-rs = { version = "=0.18.5", features = ["png"] }
 
