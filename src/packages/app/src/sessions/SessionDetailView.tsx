@@ -426,7 +426,58 @@ export function DetailFigures({
   );
 }
 
-/** The session's name, a pill with how long ago its last message was, then model, project, client, start and duration. */
+/** Where the session's first and latest prompts were typed, as Core tags them (`cli:iterm`, `mobile:iphone`). */
+function OriginTags({ session, theme }: { session: Session; theme: Theme }) {
+  const zh = Boolean(theme.zh);
+  const tags = [
+    {
+      label: zh ? "首条消息" : "First prompt",
+      help: zh
+        ? "第一条消息在哪里打的：类别:来源"
+        : "Where the first prompt was typed: category:source",
+      tag: session.origins?.init,
+    },
+    {
+      label: zh ? "最新消息" : "Latest prompt",
+      help: zh
+        ? "最新一条消息在哪里打的：类别:来源"
+        : "Where the latest prompt was typed: category:source",
+      tag: session.origins?.latest,
+    },
+  ].filter((item): item is typeof item & { tag: string } => Boolean(item.tag));
+  if (tags.length === 0) return null;
+  return (
+    <div
+      className="session-statistics-detail-origins"
+      style={{
+        ...row,
+        gap: 12,
+        fontSize: 11,
+        color: theme.secondary,
+        flexWrap: "wrap",
+      }}
+    >
+      {tags.map((item) => (
+        <span key={item.label} style={{ ...row, gap: 6 }} title={item.help}>
+          {item.label}
+          <span
+            style={{
+              color: theme.text,
+              padding: "1px 7px",
+              borderRadius: 999,
+              border: `1px solid ${theme.border}`,
+              userSelect: "text",
+            }}
+          >
+            {item.tag}
+          </span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** The session's name, a pill with how long ago its last message was, then model, project, client, start and duration, then where its prompts were typed. */
 function DetailHeader({
   session,
   detail,
@@ -526,6 +577,7 @@ function DetailHeader({
           ].join(" · ")}
         </span>
       </div>
+      <OriginTags session={session} theme={theme} />
     </div>
   );
 }
