@@ -22,6 +22,7 @@ mod reminders;
 mod reviewer;
 mod statusline;
 mod transcript;
+mod turn_log;
 // The callback channel: a Unix socket, or a named pipe on Windows.
 #[cfg(unix)]
 #[path = "unix.rs"]

@@ -14,7 +14,9 @@ pub struct Record {
     pub at: i64,
     pub usage: Usage,
     pub parent: Option<String>,
-    pub archived: bool,
+    /// Whether the client archived the session; None when the record does
+    /// not say, as a turn log's turns do not.
+    pub archived: Option<bool>,
     pub updated: Option<i64>,
     /// How long the call itself took, where the client records it
     /// (`metering::Event::duration_ms`).

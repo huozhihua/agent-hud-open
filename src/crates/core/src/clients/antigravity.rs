@@ -262,7 +262,7 @@ pub(crate) fn read(
                 reasoning: u.thinking.min(u.output),
             },
             parent: None,
-            archived: false,
+            archived: Some(false),
             updated: None,
             duration_ms: None,
         });

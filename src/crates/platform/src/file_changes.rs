@@ -143,13 +143,41 @@ impl FileChanges {
     }
 }
 
+/// Each root under every name it has. A database root (Cursor's
+/// `state.vscdb`) also changes through its write-ahead log beside it, which
+/// the engine reads as the database (`log_files::owned_path`).
 fn root_names<'a>(roots: impl Iterator<Item = &'a PathBuf>) -> Vec<PathBuf> {
     let mut names = HashSet::new();
     for root in roots {
-        names.insert(root.clone());
+        let mut both = vec![root.clone()];
         if let Ok(real) = root.canonicalize() {
-            names.insert(real);
+            both.push(real);
+        }
+        for name in both {
+            let mut wal = name.clone().into_os_string();
+            wal.push("-wal");
+            names.insert(PathBuf::from(wal));
+            names.insert(name);
         }
     }
     names.into_iter().collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn a_database_root_is_watched_with_its_write_ahead_log() {
+        let names = root_names([PathBuf::from("/nowhere/User/globalStorage/state.vscdb")].iter());
+        assert!(names.contains(&PathBuf::from("/nowhere/User/globalStorage/state.vscdb")));
+        assert!(names.contains(&PathBuf::from(
+            "/nowhere/User/globalStorage/state.vscdb-wal"
+        )));
+        let wal = Path::new("/nowhere/User/globalStorage/state.vscdb-wal");
+        assert!(names.iter().any(|root| wal.starts_with(root)));
+        let other = Path::new("/nowhere/User/globalStorage/storage.json");
+        assert!(!names.iter().any(|root| other.starts_with(root)));
+    }
 }

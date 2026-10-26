@@ -224,7 +224,7 @@ iPhone 和发行版在同一个网络里，不订阅也能在 iPhone 与 Apple W
 | **Antigravity** | ✓ | ✓ |  | ✓ |  | ✓ | ✓ |  |
 | **Cursor** | ✓ | ✓ |  |  |  | ✓ |  |  |
 | **Grok&nbsp;CLI** | ✓ |  | ✓ |  |  | ✓ |  |  |
-| **Grok&nbsp;Bot** | ✓ | ✓ |  |  |  |  | ✓ |  |
+| **Grok&nbsp;Bot** | 会话 | ✓ |  |  |  |  | ✓ |  |
 | **GitHub&nbsp;Copilot&nbsp;CLI** | ✓ | ✓ | ✓ |  |  | ✓ |  |  |
 | **OpenCode** | ✓ | ✓ |  |  |  | ✓ | ✓ |  |
 | **Kimi** | ✓ | ✓ | ✓ |  |  | ✓ |  |  |
@@ -237,12 +237,12 @@ iPhone 和发行版在同一个网络里，不订阅也能在 iPhone 与 Apple W
 | **Qwen&nbsp;Code** | ✓ |  |  | ✓ |  | ✓ |  |  |
 | **Devin&nbsp;CLI** | ✓ | ✓ |  | ✓ |  | ✓ |  |  |
 
-另外还读取 **GLM Coding Plan** 的额度，并支持批准 **Qoder** 系列的请求。Codex 的批准需先在 Codex 中信任回调，Copilot 的额度需先在设置中同意读取，Devin 的额度来自其 CLI 的本机缓存。
+另外还读取 **GLM Coding Plan** 的额度，并支持批准 **Qoder** 系列的请求。Codex 的批准需先在 Codex 中信任回调，Copilot 的额度需先在设置中同意读取，Devin 的额度来自其 CLI 的本机缓存。Cursor 的 Token 需要 Cursor 3.27 或更新版本；Grok Bot 的 Token 花在 Cursor 的服务器上，所以只显示它的会话。
 
 ## 保护你的数据
 
 - **在你的电脑上读取**：各 agent 已经保存的记录。用量历史保存在本机的 SQLite 数据库中。
-- **向各厂商读取**：额度、余额，以及 Cursor 的用量，使用 agent 现有的登录状态或已配置的密钥。任何一次读取都不会向模型发送消息，凭据不会被保存。
+- **向各厂商读取**：额度与余额，使用 agent 现有的登录状态或已配置的密钥。任何一次读取都不会向模型发送消息，凭据不会被保存。
 - **在你的电脑上写入**：agent 自己设置里的回调，用来接收请求与回复，只在客户端回调打开时存在；关闭即一并移除。
 - **上传**：从本仓库源码构建的应用不上传任何数据。
 - **在 iPhone 与 Apple Watch 上访问数据**，经由发行版：

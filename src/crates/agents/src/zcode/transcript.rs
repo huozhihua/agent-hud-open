@@ -98,7 +98,7 @@ pub fn read(db: &Connection, cursor: &Value) -> rusqlite::Result<Page> {
                 reasoning,
             },
             parent: None,
-            archived: false,
+            archived: Some(false),
             updated: None,
             duration_ms: None,
         });

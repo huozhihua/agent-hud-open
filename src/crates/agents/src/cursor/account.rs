@@ -1,7 +1,7 @@
 //! Cursor's account (Open's CursorClient): the access token Cursor keeps in
-//! its own database, the dashboard's usage summary as quota windows, and
-//! the dashboard's sessions (`sessions.rs`).
-use super::sessions;
+//! its own database and the dashboard's usage summary as quota windows.
+//! Sessions and their tokens are read on this Mac (`sessions.rs`, the turn
+//! log), never from the dashboard.
 use crate::account::{
     account_id, legacy_account, locate, DatabaseFailure, Host, HttpFailure, HttpRequest, Reading,
 };
@@ -12,7 +12,8 @@ use serde_json::{json, Value};
 use std::time::Duration;
 
 /// Cursor's state database, where it keeps its sign-in and chat headers.
-const STATE: Location = Location::app_data(&["Cursor"], "User/globalStorage/state.vscdb");
+pub(crate) const STATE: Location =
+    Location::app_data(&["Cursor"], "User/globalStorage/state.vscdb");
 pub const DATABASE: PerOs<Location> = PerOs {
     macos: Support::Verified(STATE),
     windows: Support::Unverified(STATE),
@@ -225,8 +226,6 @@ pub fn read(host: &dyn Host) -> Result<Reading, String> {
             })
         })
         .collect::<Vec<_>>();
-    let session_records =
-        sessions::read_sessions(host, &database, user, &token, &cookie_str).unwrap_or_default();
     let notice = quotas.is_empty().then(|| {
         l10n::text(
             "Cursor 已连接，当前计划未提供额度比例",
@@ -239,7 +238,7 @@ pub fn read(host: &dyn Host) -> Result<Reading, String> {
         billing: Vec::new(),
         notice,
         additional_accounts: Vec::new(),
-        session_records,
+        session_records: Vec::new(),
         services: Vec::new(),
         account: Some(
             json!({"id":account_identity,"provider":"cursor","label":email,"plan":body["membershipType"],"checkedAt":Utc::now().to_rfc3339()}),
@@ -254,7 +253,6 @@ mod tests {
     use std::path::PathBuf;
 
     const SUMMARY: &str = "https://cursor.com/api/usage-summary";
-    const EVENTS: &str = "https://cursor.com/api/dashboard/get-filtered-usage-events";
     const DB: &str = "/u/AppData/Cursor/User/globalStorage/state.vscdb";
 
     fn token(expires_in: i64) -> String {
@@ -265,34 +263,20 @@ mod tests {
         )
     }
 
-    /// A Cursor state database with these ItemTable values and chat headers.
-    fn database(
-        dir: &tempfile::TempDir,
-        items: &[(&str, &str)],
-        chats: &[(&str, Value)],
-    ) -> PathBuf {
+    /// A Cursor state database with these ItemTable values.
+    fn database(dir: &tempfile::TempDir, items: &[(&str, &str)]) -> PathBuf {
         let path = dir.path().join("state.vscdb");
         let db = rusqlite::Connection::open(&path).unwrap();
-        db.execute_batch(
-            "CREATE TABLE ItemTable (key TEXT PRIMARY KEY, value BLOB);
-             CREATE TABLE composerHeaders (composerId TEXT PRIMARY KEY, value TEXT);",
-        )
-        .unwrap();
+        db.execute_batch("CREATE TABLE ItemTable (key TEXT PRIMARY KEY, value BLOB);")
+            .unwrap();
         for (key, value) in items {
             db.execute("INSERT INTO ItemTable VALUES (?1, ?2)", [key, value])
                 .unwrap();
         }
-        for (id, value) in chats {
-            db.execute(
-                "INSERT INTO composerHeaders VALUES (?1, ?2)",
-                [*id, value.to_string().as_str()],
-            )
-            .unwrap();
-        }
         path
     }
 
-    fn signed_in(dir: &tempfile::TempDir, token: &str, chats: &[(&str, Value)]) -> FakeHost {
+    fn signed_in(dir: &tempfile::TempDir, token: &str) -> FakeHost {
         let mut host = FakeHost::new("/u");
         host.databases.insert(
             DB.into(),
@@ -302,7 +286,6 @@ mod tests {
                     ("cursorAuth/accessToken", token),
                     ("cursorAuth/cachedEmail", "me@example.com"),
                 ],
-                chats,
             ),
         );
         host
@@ -327,7 +310,7 @@ mod tests {
     fn the_saved_sign_in_reads_the_usage_summary() {
         let dir = tempfile::tempdir().unwrap();
         let token = token(3600);
-        let host = signed_in(&dir, &token, &[]).answer(SUMMARY, Ok(summary()));
+        let host = signed_in(&dir, &token).answer(SUMMARY, Ok(summary()));
         let reading = read(&host).unwrap();
         let identity = legacy_account("Cursor", "user_123", "").unwrap();
         let account = reading.account.unwrap();
@@ -353,7 +336,8 @@ mod tests {
                 format!("WorkosCursorSessionToken=user_123%3A%3A{token}")
             )]
         );
-        // The events are unreachable here, so there are no sessions.
+        // Sessions come from Cursor's own files: the summary is the one request.
+        assert_eq!(sent.len(), 1);
         assert!(reading.session_records.is_empty());
     }
 
@@ -364,7 +348,7 @@ mod tests {
         body["individualUsage"]["overall"] = json!({"used": 5.0, "limit": 10.0});
         body["individualUsage"]["onDemand"] = json!({"used": 1.0, "limit": 10.0});
         body["teamUsage"] = json!({"pooled": {"used": 2.0, "limit": 10.0}});
-        let host = signed_in(&dir, &token(3600), &[]).answer(SUMMARY, Ok(body));
+        let host = signed_in(&dir, &token(3600)).answer(SUMMARY, Ok(body));
         let reading = read(&host).unwrap();
         // The Swift app's account for user_123, as its quota history keys it.
         let account = "account:34591b03e518547be61123ba4f04d8cac609afdd291ac7fcce82555fe7d45729";
@@ -391,16 +375,14 @@ mod tests {
     #[test]
     fn sign_in_problems_are_named() {
         let dir = tempfile::tempdir().unwrap();
-        let expired = signed_in(&dir, &token(-10), &[]);
+        let expired = signed_in(&dir, &token(-10));
         assert_eq!(
             read(&expired).err().unwrap(),
             "Cursor's saved access token expired; sign in in Cursor to renew it."
         );
         let dir = tempfile::tempdir().unwrap();
         let mut signed_out = FakeHost::new("/u");
-        signed_out
-            .databases
-            .insert(DB.into(), database(&dir, &[], &[]));
+        signed_out.databases.insert(DB.into(), database(&dir, &[]));
         assert_eq!(
             read(&signed_out).err().unwrap(),
             "Sign in to Cursor to read its account usage."
@@ -414,39 +396,5 @@ mod tests {
         let mut odd = FakeHost::new("/u");
         odd.databases.insert(DB.into(), path);
         assert_eq!(read(&odd).err().unwrap(), database_format());
-    }
-
-    #[test]
-    fn dashboard_sessions_take_local_titles() {
-        let dir = tempfile::tempdir().unwrap();
-        let event = |conversation: &str| {
-            json!({"timestamp": "1760000000000", "model": "gpt-5", "conversationId": conversation,
-                   "tokenUsage": {"inputTokens": 10, "outputTokens": 5}})
-        };
-        let host = signed_in(
-            &dir,
-            &token(3600),
-            &[("comp-1", json!({"name": " Fix the build ", "isArchived": true}))],
-        )
-        .file("/u/.cursor/chats/ws1/comp-2/meta.json", r#"{"title": "Local chat"}"#)
-        .answer(SUMMARY, Ok(summary()))
-        .answer(
-            EVENTS,
-            Ok(json!({"totalUsageEventsCount": 2, "usageEventsDisplay": [event("comp-1"), event("comp-2")]})),
-        );
-        let reading = read(&host).unwrap();
-        let title = |conversation: &str| {
-            reading
-                .session_records
-                .iter()
-                .find(|r| r["id"].as_str().unwrap().ends_with(conversation))
-                .unwrap()["title"]
-                .clone()
-        };
-        assert_eq!(title("comp-1"), "Fix the build");
-        assert_eq!(title("comp-2"), "Local chat");
-        let sent = host.sent.borrow();
-        assert_eq!(sent[1].1.as_ref().unwrap()["page"], 1);
-        assert_eq!(sent[1].1.as_ref().unwrap()["pageSize"], 1000);
     }
 }

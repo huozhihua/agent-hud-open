@@ -63,7 +63,7 @@ pub fn read(path: &Path, cursor: &Value) -> rusqlite::Result<Page> {
             at,
             usage: Usage::default(),
             parent: None,
-            archived: false,
+            archived: Some(false),
             updated: None,
             duration_ms: None,
         });

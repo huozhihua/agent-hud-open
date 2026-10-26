@@ -422,7 +422,7 @@ pub(super) fn read(
                 ..Usage::default()
             },
             parent: None,
-            archived: false,
+            archived: Some(false),
             updated: None,
             duration_ms: r.duration_ms.and_then(|ms| u64::try_from(ms).ok()),
         });

@@ -347,3 +347,85 @@ fn copilot_chat_spans_keep_their_own_time() {
     refresh(&mut backend);
     assert_eq!(timed_calls(&backend), [(200, Some(3_250)), (300, None)]);
 }
+
+#[test]
+fn cursor_sessions_come_from_its_database_and_their_tokens_from_the_turn_log() {
+    use agent_hud_agents::hooks::turn_log;
+    use std::fs;
+    let root = tempfile::tempdir().unwrap();
+    let now = chrono::Utc::now().timestamp_millis();
+    let state = root.path().join("state.vscdb");
+    let db = Connection::open(&state).unwrap();
+    db.execute_batch("CREATE TABLE composerHeaders(composerId TEXT PRIMARY KEY, value TEXT)")
+        .unwrap();
+    let header = |name: &str, at: i64, archived: bool| {
+        json!({
+            "name": name,
+            "createdAt": at - 60_000,
+            "lastUpdatedAt": at - 60_000,
+            "conversationCheckpointLastUpdatedAt": at,
+            "isArchived": archived,
+            "workspaceIdentifier": {"uri": {"fsPath": "/repo"}},
+        })
+        .to_string()
+    };
+    db.execute(
+        "INSERT INTO composerHeaders VALUES('c1', ?1), ('c2', ?2)",
+        [
+            header("Code quality review", now - 1_000, false),
+            header("Old try", now - 5_000, true),
+        ],
+    )
+    .unwrap();
+    let folder = root.path().join("clients/cursor");
+    fs::create_dir_all(&folder).unwrap();
+    let turn = |session: &str, id: &str, input: u64| {
+        turn_log::line(&agent_hud_agents::HookEvent {
+            source: "cursor".into(),
+            session_id: session.into(),
+            at_ms: now - 2_000,
+            kind: "completion".into(),
+            data: json!({"turnId": id, "model": "grok-4.7", "workspace": "/repo",
+                         "usage": {"input": input, "output": 10, "read": 600, "write": 0, "reasoning": 0}}),
+        })
+        .unwrap()
+    };
+    let log = folder.join(turn_log::file_name(now).unwrap());
+    fs::write(
+        &log,
+        turn("cursor:c1", "g1", 100) + &turn("cursor:c2", "g2", 50),
+    )
+    .unwrap();
+    let mut backend = AgentHudCore::new(
+        vec![
+            SourceRoot {
+                path: state.clone(),
+                provider: "cursor",
+            },
+            SourceRoot {
+                path: folder.clone(),
+                provider: "cursor",
+            },
+        ],
+        root.path().join("hud"),
+    );
+    // Both turns count, the archived session's too.
+    assert_eq!(refresh(&mut backend)["totals"]["total"], 710 + 660);
+    let sessions = backend.request("sessions", json!({"scope":"all"})).unwrap();
+    assert_eq!(sessions["total"], 1, "the archived session is not listed");
+    let listed = &sessions["items"][0];
+    assert_eq!(listed["id"], "cursor:c1");
+    assert_eq!(listed["title"], "Code quality review");
+    assert_eq!(listed["tokens"], 710);
+
+    // A later turn is read from where the log stopped, onto the same session.
+    let mut file = fs::OpenOptions::new().append(true).open(&log).unwrap();
+    std::io::Write::write_all(&mut file, turn("cursor:c1", "g3", 200).as_bytes()).unwrap();
+    drop(file);
+    assert_eq!(refresh(&mut backend)["totals"]["total"], 710 + 660 + 810);
+    let detail = backend
+        .request("session_detail", json!({"id":"cursor:c1"}))
+        .unwrap();
+    assert_eq!(detail["usage"]["total"], 710 + 810);
+    assert_eq!(detail["calls"].as_array().unwrap().len(), 2);
+}

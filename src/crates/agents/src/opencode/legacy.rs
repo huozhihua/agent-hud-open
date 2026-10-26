@@ -87,7 +87,7 @@ pub fn read(path: &Path) -> rusqlite::Result<Page> {
             reasoning: number(&v.tokens["reasoning"]),
         },
         parent: None,
-        archived: false,
+        archived: Some(false),
         updated: v.time["completed"].as_i64(),
         duration_ms: super::transcript::reply_time(&v.finish, &v.time),
     };

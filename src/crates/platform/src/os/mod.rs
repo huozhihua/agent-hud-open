@@ -146,18 +146,32 @@ mod tests {
     use super::*;
 
     /// The sources every agent's descriptor names, under a home without
-    /// variables set (Grok Bot's cache is left out: only macOS has it).
+    /// variables set (Grok Bot's cache is left out: only macOS has it;
+    /// Cursor's places differ by OS and are checked after).
     #[test]
     fn roots_follow_the_descriptors() {
         let home = Path::new("/h");
-        let roots = agent_source_roots(home, &Environment::new())
-            .into_iter()
-            .filter(|root| root.provider != "grok-bot")
+        let all = agent_source_roots(home, &Environment::new());
+        let roots = all
+            .iter()
+            .filter(|root| !matches!(root.provider, "grok-bot" | "cursor"))
             .map(|root| {
                 let path = root.path.strip_prefix(home).unwrap().to_owned();
                 (root.provider, path)
             })
             .collect::<Vec<_>>();
+        // Cursor: its database under the application data folder, then,
+        // where its hooks run, the turn log in Agent HUD's data folder.
+        let cursor = all
+            .iter()
+            .filter(|root| root.provider == "cursor")
+            .map(|root| root.path.clone())
+            .collect::<Vec<_>>();
+        assert!(cursor[0].ends_with("Cursor/User/globalStorage/state.vscdb"));
+        assert!(cursor.len() <= 2);
+        assert!(cursor[1..]
+            .iter()
+            .all(|path| path.ends_with("app.agenthud.next/clients/cursor")));
         let expected = [
             ("claude", ".claude/projects"),
             ("claude", ".config/claude/projects"),

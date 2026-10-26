@@ -44,5 +44,6 @@ fn completed(payload: &Value, now_ms: i64) -> Option<Completed> {
         workspace: payload["workspacePaths"][0].as_str().map(str::to_owned),
         model: payload["modelName"].as_str().map(str::to_owned),
         transcript_path: None,
+        usage: None,
     })
 }

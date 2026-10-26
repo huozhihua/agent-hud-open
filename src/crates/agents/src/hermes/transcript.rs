@@ -134,7 +134,7 @@ pub fn read(db: &Connection, path: &Path, cursor: &Value) -> rusqlite::Result<Pa
                         reasoning: 0,
                     },
                     parent: None,
-                    archived: false,
+                    archived: Some(false),
                     updated: None,
                     duration_ms: None,
                 });
@@ -173,7 +173,7 @@ pub fn read(db: &Connection, path: &Path, cursor: &Value) -> rusqlite::Result<Pa
                     reasoning: 0,
                 },
                 parent: None,
-                archived: false,
+                archived: Some(false),
                 updated: None,
                 duration_ms: None,
             });

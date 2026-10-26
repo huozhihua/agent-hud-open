@@ -42,6 +42,8 @@ pub(crate) fn accepts(path: &Path, source: &str) -> bool {
         "zcode" => name == "db.sqlite",
         "devin" => name == "sessions.db",
         "opencode" => name == "opencode.db",
+        // Cursor's session headers, and the turn log its `stop` hook keeps.
+        "cursor" => name == "state.vscdb" || agent_hud_agents::hooks::turn_log::accepts(path),
         _ => false,
     }
 }
@@ -197,10 +199,11 @@ impl AgentHudCore {
             *budget = budget.saturating_sub(2 * 1024 * 1024);
         }
         let is_bot = stamp.source == "grok-bot";
+        let is_turn_log = agent_hud_agents::hooks::turn_log::accepts(path);
         let is_legacy =
             stamp.source == "opencode" && agent_hud_agents::opencode::legacy::accepts(path);
         let replaces_sessions = stamp.source == "opencode" && !is_legacy;
-        let reader = if is_batch || is_bot || is_legacy {
+        let reader = if is_batch || is_bot || is_legacy || is_turn_log {
             None
         } else {
             Some(legacy_database::ReadOnlyDatabase::open(path).map_err(|_| {
@@ -215,6 +218,8 @@ impl AgentHudCore {
             agent_hud_agents::opencode::legacy::read(path)
         } else if is_bot {
             agent_hud_agents::grok::bot::read(path, cursor)
+        } else if is_turn_log {
+            agent_hud_agents::hooks::turn_log::read(path, cursor)
         } else if is_batch {
             source_batches::read(
                 path,
@@ -236,6 +241,7 @@ impl AgentHudCore {
                     agent_hud_agents::opencode::transcript::read(&reader.connection, cursor)
                 }
                 "devin" => agent_hud_agents::devin::transcript::read(&reader.connection, cursor),
+                "cursor" => agent_hud_agents::cursor::sessions::read(&reader.connection, cursor),
                 "antigravity" => crate::clients::antigravity::read(
                     &reader.connection,
                     self.database.as_ref().ok_or("Usage ledger unavailable")?,
@@ -279,7 +285,10 @@ impl AgentHudCore {
             }
             let log = logs.get_mut(&key).unwrap();
             let is_virtual = key.to_string_lossy().contains("#hud-session-");
-            if is_virtual {
+            // A turn log's month adds tokens to a session another source
+            // lists, and leaves that source its origin: the month's file is
+            // removed after two months while the session goes on.
+            if is_virtual && !(is_turn_log && log.origin_path.is_some()) {
                 log.origin_path = Some(path.into());
             }
             // OpenCode updates existing messages and may replace the legacy
@@ -294,7 +303,9 @@ impl AgentHudCore {
                 log.live.parent_id = record.parent.clone();
                 log.live.is_subagent = true;
             }
-            log.archived = record.archived;
+            if let Some(archived) = record.archived {
+                log.archived = archived;
+            }
             log.naming.name(0, record.title.as_deref());
             if let Some(fallback) = record.title_fallback {
                 log.naming.fallback(fallback);

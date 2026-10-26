@@ -9,6 +9,7 @@ pub mod configuration;
 pub mod events;
 pub mod observer;
 pub mod request;
+pub mod turn_log;
 pub mod windows;
 
 pub use observer::Observer;
@@ -136,6 +137,10 @@ pub struct Completed {
     pub model: Option<String>,
     /// The transcript the platform may read to enrich the event.
     pub transcript_path: Option<Value>,
+    /// The tokens the turn spent, where the callback reports them and the
+    /// client keeps them nowhere else on disk (Cursor). The platform appends
+    /// them to the client's turn log (`hooks::turn_log`).
+    pub usage: Option<crate::Usage>,
 }
 
 /// The compaction hook.
@@ -204,6 +209,7 @@ pub fn stop(payload: &Value, now_ms: i64, prompt_turns: bool) -> Option<Complete
         workspace: payload["cwd"].as_str().map(str::to_owned),
         model: None,
         transcript_path: None,
+        usage: None,
     })
 }
 

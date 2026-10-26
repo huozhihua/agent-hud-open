@@ -2562,6 +2562,20 @@ fn events(golden: &mut Golden) {
             without(cursor_stop(), "workspace_roots"),
         ),
         (
+            "completion/cursor/with-tokens",
+            "cursor",
+            completion,
+            with(
+                with(
+                    with(cursor_stop(), "input_tokens", json!(740_409)),
+                    "output_tokens",
+                    json!(17_649),
+                ),
+                "cache_read_tokens",
+                json!(639_616),
+            ),
+        ),
+        (
             "completion/copilot/other-stop-reason",
             "copilot",
             completion,

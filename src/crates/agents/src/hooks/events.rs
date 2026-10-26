@@ -97,6 +97,10 @@ pub fn parse_event(
             if let Some(path) = done.transcript_path {
                 data["transcriptPath"] = path;
             }
+            // The turn's tokens, for the client's turn log (`turn_log`).
+            if let Some(usage) = done.usage {
+                data["usage"] = json!(usage);
+            }
             Ok(Some(event(
                 source,
                 &done.session,

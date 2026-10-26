@@ -12,7 +12,7 @@
 - `src/process.rs`: a hook caller as platform reads it (`Caller`), and where a session started (`Origin`); each client's rules are in its `process.rs`, named by `Hooks::origin` and `Permission::unattended`.
 - `src/replies.rs`: how words reach a client's sessions (`Agent::replies`), for the questions core answers through the host.
 - `src/channel.rs`: a client's native channel (`Agent::channel`), such as Codex's desktop IPC: what it carries and on which OS it runs. Platform runs it in `platform/src/clients/<id>/`.
-- `tests/golden.rs`: every hook format's output for 1,616 inputs, pinned in `tests/golden/hook_formats.json`. A change that alters one must regenerate the fixture (`UPDATE_GOLDEN=1`) and show the diff.
+- `tests/golden.rs`: every hook format's output for 1,617 inputs, pinned in `tests/golden/hook_formats.json`. A change that alters one must regenerate the fixture (`UPDATE_GOLDEN=1`) and show the diff.
 
 No file in `src/` names an operating system: what differs by OS is data (`PerOs`) or an answer from the `Host`. The crate reads only the logs and databases the engine names; it opens no sockets, starts no processes and reaches no files, network or credentials except through the `Host`.
 
@@ -40,7 +40,7 @@ Permission hooks: Claude, Codex, Qoder/CN/Work, CodeBuddy, WorkBuddy, ZCode, Qwe
 
 The reporting hooks are asynchronous. Claude/Codex origins patch only `SessionStart` and `UserPromptSubmit`; compaction is patched independently under `PreCompact`. Legacy Claude compaction commands used `--session-origin-hook claude`; the configuration adapter recognizes those only inside `PreCompact`. New hosts may use `--compaction-hook claude` explicitly. Existing commands are recognized by their exact final flag/source suffix, as in the original `HookCommand`; executable/script paths are quoted by the platform, fixed flags/source names are plain arguments.
 
-Completion formats: Antigravity, Cursor, Copilot, CodeBuddy, Qwen and Devin. Claude/Codex completions remain owned by transcript events. Qwen hook timeout values retain the original millisecond convention. Platform callbacks return `{}` for reports, except Antigravity completion callbacks which return `{"decision":"stop"}` as the original entrypoint does; this is not permission approval.
+Completion formats: Antigravity, Cursor, Copilot, CodeBuddy, Qwen and Devin. Claude/Codex completions remain owned by transcript events. Cursor's `stop` also reports the generation's tokens, which Cursor keeps nowhere else on disk (its own messages store 0/0): the completion event carries them as `data.usage`, the platform appends them to Cursor's turn log in Agent HUD's data folder (`hooks::turn_log`, `clients/cursor/turns-<YYYY-MM>.jsonl`), and the engine reads that log like a client's own. It is the one hook whose facts are kept. Qwen hook timeout values retain the original millisecond convention. Platform callbacks return `{}` for reports, except Antigravity completion callbacks which return `{"decision":"stop"}` as the original entrypoint does; this is not permission approval.
 
 ## Event API
 
@@ -48,7 +48,7 @@ Completion formats: Antigravity, Cursor, Copilot, CodeBuddy, Qwen and Devin. Cla
 
 CodeBuddy's original completion adapter optionally reads the latest completed assistant message in at most the transcript's last MiB. `enrich_codebuddy_completion(&mut event, verified_tail)` implements that pure record parsing and stops at a newer user message; the platform alone resolves/validates the transcript and supplies bounded bytes. Without that evidence, the event keeps the original callback-time fallback ID and no fabricated model.
 
-Core's `hook_events::HookEvidence` overlays fresh source-derived session metadata; it does not mutate parser heads or usage. Attention only changes an in-flight turn, compaction is automatic/newer than the source line/at most 300 seconds old, and a completed turn cannot override newer source evidence. Completion-only presentation records explicitly mark usage unavailable; their required numeric `tokens: 0` is a wire sentinel, never a metered contribution.
+Core's `hook_events::HookEvidence` overlays fresh source-derived session metadata; it does not mutate parser heads or usage. Attention only changes an in-flight turn, compaction is automatic/newer than the source line/at most 300 seconds old, and a completed turn cannot override newer source evidence. Completion-only presentation records explicitly mark usage unavailable; their required numeric `tokens: 0` is a wire sentinel, never a metered contribution. Cursor's tokens reach the ledger through its turn log, not through this overlay.
 
 ## Source and validation
 

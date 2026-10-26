@@ -216,7 +216,36 @@ pub(crate) fn schema(db: &Connection) -> rusqlite::Result<()> {
          DELETE FROM usage_meter_bucket WHERE contribution LIKE '%/.agent-hud-projection-%';
          DELETE FROM ingestion_logs WHERE path LIKE '%/.agent-hud-projection-%';",
     );
-    remove_turn_text(db)
+    remove_turn_text(db)?;
+    forget_dashboard_usage(db)
+}
+
+/// Until 2026-10-26 Cursor's and Grok Bot's sessions and tokens came from
+/// Cursor's dashboard, which stopped listing Grok Bot's usage after a plan
+/// change and counted Grok Bot's daily spend a second time as a Cursor
+/// session. Cursor is read on this Mac now (its sessions in its database,
+/// its tokens in its turn log) and Grok Bot keeps no tokens on this Mac, so
+/// everything the dashboard gave leaves once, by `user_version` 2; the
+/// sessions are read again from their local sources.
+fn forget_dashboard_usage(db: &Connection) -> rusqlite::Result<()> {
+    let version: i64 = db.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    if version >= 2 {
+        return Ok(());
+    }
+    let dashboard = "SELECT path FROM ingestion_logs
+        WHERE CASE WHEN json_valid(coalesce(head,payload))
+              THEN json_extract(coalesce(head,payload),'$.source') END IN ('cursor','grok-bot')";
+    db.execute_batch(&format!(
+        "BEGIN;
+         DELETE FROM usage_meter_event WHERE source IN ('cursor','grok-bot');
+         DELETE FROM usage_meter_bucket WHERE source IN ('cursor','grok-bot');
+         DELETE FROM usage_meter_mark WHERE contribution IN ({dashboard});
+         DELETE FROM usage_meter_model_context WHERE source IN ('cursor','grok-bot');
+         DELETE FROM session_mapping WHERE source IN ('cursor','grok-bot');
+         DELETE FROM ingestion_logs WHERE path IN ({dashboard});
+         PRAGMA user_version=2;
+         COMMIT;"
+    ))
 }
 
 /// Checkpoints keep no conversation text since 2026-10-21 (agent-hud-native-open's
@@ -402,6 +431,60 @@ mod tests {
         let version: i64 = db
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 1);
+        assert_eq!(version, 2);
+    }
+
+    #[test]
+    fn the_dashboards_cursor_and_grok_bot_usage_leaves_once() {
+        let db = Connection::open_in_memory().unwrap();
+        schema(&db).unwrap();
+        db.execute_batch("PRAGMA user_version=1").unwrap();
+        let log = |path: &str, source: &str| {
+            db.execute(
+                "INSERT INTO ingestion_logs(path,payload,head) VALUES(?1,'{}',?2)",
+                [path, &format!(r#"{{"source":"{source}"}}"#)],
+            )
+            .unwrap();
+            db.execute(
+                "INSERT INTO usage_meter_event(contribution,event_key,source,model,at_ms,input,output,cache_read,cache_write,reasoning) VALUES(?1,'k',?2,'m',1,1,1,0,0,0)",
+                [path, source],
+            )
+            .unwrap();
+            db.execute(
+                "INSERT INTO usage_meter_mark(contribution,at_ms,kind) VALUES(?1,1,0)",
+                [path],
+            )
+            .unwrap();
+            db.execute(
+                "INSERT INTO session_mapping(source,session_id,canonical_path) VALUES(?1,?2,?2)",
+                [source, path],
+            )
+            .unwrap();
+        };
+        log("/account/cursor#hud-session-61", "cursor");
+        log("/bot/roster.blob#hud-session-62", "grok-bot");
+        log("/bot/roster.blob", "grok-bot");
+        log("/claude/s.jsonl", "claude");
+        db.execute(
+            "INSERT INTO ingestion_logs(path,payload,head) VALUES('/odd','not json',NULL)",
+            [],
+        )
+        .unwrap();
+        schema(&db).unwrap();
+        let count = |sql: &str| -> i64 { db.query_row(sql, [], |row| row.get(0)).unwrap() };
+        assert_eq!(
+            count("SELECT count(*) FROM ingestion_logs"),
+            2,
+            "the Claude log and the unreadable one stay"
+        );
+        assert_eq!(count("SELECT count(*) FROM usage_meter_event"), 1);
+        assert_eq!(count("SELECT count(*) FROM usage_meter_mark"), 1);
+        assert_eq!(count("SELECT count(*) FROM session_mapping"), 1);
+        assert_eq!(count("PRAGMA user_version"), 2);
+
+        // A later Cursor turn stays: the cleanup runs once.
+        log("/data/clients/cursor/turns-2026-10.jsonl", "cursor");
+        schema(&db).unwrap();
+        assert_eq!(count("SELECT count(*) FROM usage_meter_event"), 2);
     }
 }

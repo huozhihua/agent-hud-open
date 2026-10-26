@@ -12,7 +12,8 @@ pub(crate) const READS_PROCESS_ENVIRONMENT: bool = false;
 /// The desktop app's resume link for a background job is unverified here.
 pub(crate) const MOVES_CLAUDE_JOBS: bool = false;
 pub(crate) use files::{
-    hook_configuration, owned_by_user, owner_only, private_directory, private_file, read_stdin,
+    hook_configuration, owned_by_user, owner_only, private_append, private_directory, private_file,
+    read_stdin,
 };
 use std::{
     path::{Path, PathBuf},

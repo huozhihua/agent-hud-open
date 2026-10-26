@@ -140,6 +140,8 @@ fn handle_payload(arguments: &[String], data: &Path, input: &[u8], output: &mut 
             }
         }
         let _ = super::record_event(data, &event);
+        // A turn's tokens, for a client that keeps them nowhere else (Cursor).
+        let _ = super::turn_log::append(data, &event);
         let _ = super::transport::send(
             data,
             source,

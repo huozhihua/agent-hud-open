@@ -26,6 +26,15 @@ pub(crate) fn private_file(path: &Path, create_new: bool) -> io::Result<fs::File
     pipe::private_file(path, create_new)
 }
 
+/// A private file opened at its end for appending. No hook that appends
+/// (Cursor's) is launched on Windows yet, so writers do not overlap here.
+pub(crate) fn private_append(path: &Path) -> io::Result<fs::File> {
+    use std::io::{Seek, SeekFrom};
+    let mut file = pipe::private_file(path, false)?;
+    file.seek(SeekFrom::End(0))?;
+    Ok(file)
+}
+
 /// A hook payload from stdin, or Err after five seconds or past `limit` bytes.
 /// Windows console and pipe handles cannot be polled, so a thread reads.
 pub(crate) fn read_stdin(bytes: &mut Vec<u8>, limit: usize) -> Result<(), ()> {

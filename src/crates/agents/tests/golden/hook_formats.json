@@ -5845,6 +5845,46 @@
     },
     "output": null
   },
+  "event/completion/cursor/with-tokens": {
+    "input": {
+      "flag": "--completion-hook",
+      "nowMs": 1760000000000,
+      "payload": {
+        "cache_read_tokens": 639616,
+        "conversation_id": "conv-1",
+        "generation_id": "gen-9",
+        "hook_event_name": "stop",
+        "input_tokens": 740409,
+        "loop_count": 0,
+        "model": "gpt-5-high",
+        "model_id": "gpt-5",
+        "output_tokens": 17649,
+        "status": "completed",
+        "workspace_roots": [
+          "/Users/me/project"
+        ]
+      },
+      "source": "cursor"
+    },
+    "output": {
+      "atMs": 1760000000000,
+      "data": {
+        "model": "gpt-5",
+        "turnId": "gen-9",
+        "usage": {
+          "input": 100793,
+          "output": 17649,
+          "read": 639616,
+          "reasoning": 0,
+          "write": 0
+        },
+        "workspace": "/Users/me/project"
+      },
+      "kind": "completion",
+      "sessionId": "cursor:conv-1",
+      "source": "cursor"
+    }
+  },
   "event/completion/devin/missing-session": {
     "input": {
       "flag": "--completion-hook",

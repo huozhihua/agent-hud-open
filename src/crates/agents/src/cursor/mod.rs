@@ -1,11 +1,35 @@
-//! Cursor.
+//! Cursor: sessions from its own database, tokens from its `stop` hook.
 pub mod account;
-mod events;
 mod hooks;
-mod sessions;
+pub mod sessions;
 
-use crate::Agent;
-use crate::{Discovery, Location};
+use crate::{Agent, Base, Discovery, Location, PerOs, Source, Support};
+
+/// Cursor's session headers, in its state database.
+const HEADERS: Source = Source {
+    reads_as: "cursor",
+    location: account::STATE,
+};
+/// The turn log the `stop` hook appends in Agent HUD's own data folder
+/// (`hooks::turn_log`): the folder the platform keeps its data in, or the one
+/// `AGENTHUD_NEXT_DATA_DIR` names. Cursor keeps a turn's tokens nowhere else
+/// on disk. Its hooks run on macOS and Linux only.
+const fn turn_log(base: Base) -> Source {
+    Source {
+        reads_as: "cursor",
+        location: Location {
+            base,
+            env: &["AGENTHUD_NEXT_DATA_DIR"],
+            folders: &["app.agenthud.next"],
+            profiles: None,
+            path: "clients/cursor",
+            not_if: None,
+        },
+    }
+}
+static MAC_SOURCES: [Source; 2] = [HEADERS, turn_log(Base::AppData)];
+static WINDOWS_SOURCES: [Source; 1] = [HEADERS];
+static LINUX_SOURCES: [Source; 2] = [HEADERS, turn_log(Base::DataHome)];
 
 static DISCOVERY: Discovery = Discovery {
     storage: &[
@@ -29,7 +53,7 @@ static DISCOVERY: Discovery = Discovery {
 pub static AGENT: Agent = Agent {
     id: "cursor",
     name: "Cursor",
-    sessions: false,
+    sessions: true,
     hooks: Some(&hooks::HOOKS),
     observer: None,
     channel: None,
@@ -37,6 +61,10 @@ pub static AGENT: Agent = Agent {
     replies: None,
     turns: None,
     items: None,
-    sources: crate::everywhere(&[]),
+    sources: PerOs {
+        macos: Support::Verified(&MAC_SOURCES),
+        windows: Support::Unverified(&WINDOWS_SOURCES),
+        linux: Support::Unverified(&LINUX_SOURCES),
+    },
     discovery: &DISCOVERY,
 };

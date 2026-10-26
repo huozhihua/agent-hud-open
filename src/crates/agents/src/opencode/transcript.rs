@@ -140,7 +140,7 @@ pub fn read(db: &Connection, cursor: &Value) -> rusqlite::Result<Page> {
                 reasoning: unsigned(&t["reasoning"]),
             },
             parent: sql_text(row, 7).map(|id| format!("opencode:{id}")),
-            archived: !matches!(row.get_ref(6)?, rusqlite::types::ValueRef::Null),
+            archived: Some(!matches!(row.get_ref(6)?, rusqlite::types::ValueRef::Null)),
             updated: v["time"]["completed"].as_i64(),
             duration_ms: reply_time(&v["finish"], &v["time"]),
         });

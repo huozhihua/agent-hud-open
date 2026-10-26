@@ -56,6 +56,17 @@ pub(crate) fn private_file(path: &Path, create_new: bool) -> io::Result<fs::File
     options.open(path)
 }
 
+/// A file only this user can read or write, opened to append: each write
+/// lands whole at the end, so two writers never overwrite each other.
+pub(crate) fn private_append(path: &Path) -> io::Result<fs::File> {
+    fs::OpenOptions::new()
+        .append(true)
+        .create(true)
+        .mode(0o600)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(path)
+}
+
 /// A hook payload from stdin, or Err after five seconds or past `limit` bytes.
 pub(crate) fn read_stdin(bytes: &mut Vec<u8>, limit: usize) -> Result<(), ()> {
     use std::os::fd::AsRawFd;
