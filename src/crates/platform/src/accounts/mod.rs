@@ -61,11 +61,12 @@ const READERS: [(&str, Reader); 12] = [
 ];
 
 /// Whether this Mac's work moves the provider's windows. Codex's are spent
-/// by Pi and other clients without Codex rollouts, and Cursor's on every
-/// device the account signs in on, so theirs are read on the account
-/// interval whatever this Mac does (agent-hud-native-open `seesLocalWork`).
+/// by Pi and other clients without Codex rollouts, Cursor's on every device
+/// the account signs in on, and Grok Bot's by bots running on Cursor's
+/// servers, so theirs are read on the account interval whatever this Mac
+/// does (agent-hud-native-open `seesLocalWork`).
 fn sees_local_work(provider: &str) -> bool {
-    !matches!(provider, "codex" | "cursor")
+    !matches!(provider, "codex" | "cursor" | "grok-bot")
 }
 
 /// The session sources whose work is the provider's: Grok's quota covers
@@ -1369,7 +1370,7 @@ mod tests {
                 "{provider}"
             );
         }
-        for provider in ["codex", "cursor"] {
+        for provider in ["codex", "cursor", "grok-bot"] {
             assert_eq!(
                 due_after(provider, &reset_later(provider), &state),
                 Duration::ZERO,
@@ -1379,12 +1380,6 @@ mod tests {
         // Work that finished since the last reading is read at once, but only
         // where this Mac's work moves the windows.
         let later = chrono::Utc::now().timestamp_millis();
-        state.finished.insert("grok-cli".into(), later);
-        assert_eq!(
-            due_after("grok-bot", &reset_later("grok-bot"), &state),
-            Duration::ZERO,
-            "Grok's CLI is Grok's work"
-        );
         state.finished.insert("opencode".into(), later);
         assert_eq!(
             due_after("glm", &reset_later("glm"), &state),

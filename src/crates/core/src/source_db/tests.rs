@@ -492,3 +492,62 @@ fn a_completion_for_an_archived_session_puts_no_placeholder_in_its_place() {
         .request("session_detail", json!({"id":"cursor:kept"}))
         .is_err());
 }
+
+#[test]
+fn grok_bots_daily_tokens_land_on_the_rosters_own_bot_session() {
+    use crate::grok_cache as bot;
+    use std::fs;
+    let root = tempfile::tempdir().unwrap();
+    let cache = root.path().join("sand-client-persistence");
+    fs::create_dir_all(&cache).unwrap();
+    let write = |key: &str, schema: u64, value: Value| {
+        fs::write(
+            bot::path(&cache, key),
+            format!(
+                "{}\n{}",
+                serde_json::to_string(key).unwrap(),
+                json!({"schemaVersion": schema, "value": value})
+            ),
+        )
+        .unwrap();
+    };
+    let now = chrono::Utc::now().timestamp_millis();
+    write(bot::ACCOUNT_KEY, 1, json!("slot-1"));
+    write(
+        &bot::roster_key("slot-1"),
+        4,
+        json!({"rows": [{"id": "bot-a", "title": "SEO & AEO Desk", "lastActivityAt": now - 1_000}]}),
+    );
+    let mut backend = AgentHudCore::new(
+        vec![SourceRoot {
+            path: cache,
+            provider: "grok-bot",
+        }],
+        root.path().join("hud"),
+    );
+    refresh(&mut backend);
+    let id = bot::session_id("slot-1", "bot-a");
+    let day = (now / 86_400_000) * 86_400_000;
+    let record = |tokens: u64| {
+        json!({"source": "grok-bot", "id": id, "title": null, "model": "grok-bot",
+               "key": format!("spend-bot-a-{}", day / 1000), "at": day,
+               "input": tokens, "output": 0, "read": 0, "write": 0})
+    };
+    backend.set_account_projection(crate::accounts::AccountProjection {
+        session_records: vec![record(4_000)],
+        ..Default::default()
+    });
+    // The day's total grows: the same key replaces it.
+    backend.set_account_projection(crate::accounts::AccountProjection {
+        session_records: vec![record(9_000)],
+        ..Default::default()
+    });
+    refresh(&mut backend);
+    let sessions = backend
+        .request("sessions", json!({"scope":"all","sources":["grok-bot"]}))
+        .unwrap();
+    assert_eq!(sessions["total"], 1, "one session per bot");
+    assert_eq!(sessions["items"][0]["id"], id);
+    assert_eq!(sessions["items"][0]["title"], "SEO & AEO Desk");
+    assert_eq!(sessions["items"][0]["tokens"], 9_000);
+}

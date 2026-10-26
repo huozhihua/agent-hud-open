@@ -3,6 +3,7 @@ pub mod account;
 pub mod bot;
 pub mod cache;
 pub mod transcript;
+mod usage;
 
 use crate::Agent;
 use crate::Discovery;

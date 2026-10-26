@@ -49,9 +49,18 @@ fn number(value: &Value) -> Option<f64> {
         .filter(|number| number.is_finite() && *number >= 0.0)
 }
 
-pub fn read(host: &dyn Host) -> Result<Reading, String> {
+/// Cursor's saved sign-in: the account's user id, its access token and the
+/// email Cursor shows. Grok Bot's server usage is read with it as well.
+pub(crate) struct SignIn {
+    pub user: String,
+    pub token: String,
+    pub email: Option<String>,
+}
+
+/// The sign-in Cursor keeps in its database; None where Cursor is not here.
+pub(crate) fn sign_in(host: &dyn Host) -> Result<Option<SignIn>, String> {
     let Ok(database) = locate(host, &DATABASE) else {
-        return Ok(Reading::empty("cursor"));
+        return Ok(None);
     };
     let rows = match host.sqlite_rows(
         &database,
@@ -60,7 +69,7 @@ pub fn read(host: &dyn Host) -> Result<Reading, String> {
         Duration::from_secs(2),
     ) {
         Ok(rows) => rows,
-        Err(DatabaseFailure::Missing) => return Ok(Reading::empty("cursor")),
+        Err(DatabaseFailure::Missing) => return Ok(None),
         Err(DatabaseFailure::Unopenable) => {
             return Err(l10n::text(
                 "无法打开 Cursor 账户数据库",
@@ -125,6 +134,17 @@ pub fn read(host: &dyn Host) -> Result<Reading, String> {
                     .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
         })
         .ok_or_else(auth_format)?;
+    Ok(Some(SignIn {
+        user: user.to_owned(),
+        token,
+        email,
+    }))
+}
+
+pub fn read(host: &dyn Host) -> Result<Reading, String> {
+    let Some(SignIn { user, token, email }) = sign_in(host)? else {
+        return Ok(Reading::empty("cursor"));
+    };
     let cookie_str = format!("WorkosCursorSessionToken={user}%3A%3A{token}");
     let body = host
         .http_json(&HttpRequest {
@@ -151,8 +171,8 @@ pub fn read(host: &dyn Host) -> Result<Reading, String> {
             "Cursor account response has an unsupported format.",
         ));
     }
-    let id = account_id("cursor", &[user]);
-    let account_identity = legacy_account("Cursor", user, "").unwrap();
+    let id = account_id("cursor", &[&user]);
+    let account_identity = legacy_account("Cursor", &user, "").unwrap();
     let reset = body["billingCycleEnd"]
         .as_str()
         .filter(|value| chrono::DateTime::parse_from_rfc3339(value).is_ok());

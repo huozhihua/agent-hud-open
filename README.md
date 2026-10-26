@@ -224,7 +224,7 @@ Install and sign in to the agents you want to follow; Agent HUD finds them by it
 | **Antigravity** | ✓ | ✓ |  | ✓ |  | ✓ | ✓ |  |
 | **Cursor** | ✓ | ✓ |  |  |  | ✓ |  |  |
 | **Grok&nbsp;CLI** | ✓ |  | ✓ |  |  | ✓ |  |  |
-| **Grok&nbsp;Bot** | Sessions | ✓ |  |  |  |  | ✓ |  |
+| **Grok&nbsp;Bot** | ✓ | ✓ |  |  |  |  | ✓ |  |
 | **GitHub&nbsp;Copilot&nbsp;CLI** | ✓ | ✓ | ✓ |  |  | ✓ |  |  |
 | **OpenCode** | ✓ | ✓ |  |  |  | ✓ | ✓ |  |
 | **Kimi** | ✓ | ✓ | ✓ |  |  | ✓ |  |  |
@@ -237,12 +237,12 @@ Install and sign in to the agents you want to follow; Agent HUD finds them by it
 | **Qwen&nbsp;Code** | ✓ |  |  | ✓ |  | ✓ |  |  |
 | **Devin&nbsp;CLI** | ✓ | ✓ |  | ✓ |  | ✓ |  |  |
 
-Also: the **GLM Coding Plan** quota, and approvals for the **Qoder** builds. Codex approvals need its hook trusted in Codex, Copilot's quota needs your consent in Settings, and Devin's quotas come from its CLI's local cache. Cursor's tokens come from Cursor 3.27 or later; Grok Bot's are spent on Cursor's servers, so only its sessions show.
+Also: the **GLM Coding Plan** quota, and approvals for the **Qoder** builds. Codex approvals need its hook trusted in Codex, Copilot's quota needs your consent in Settings, and Devin's quotas come from its CLI's local cache. Cursor's tokens come from Cursor 3.27 or later. Grok Bot's bots run on Cursor's servers, which report each bot's daily tokens; an account merged into SuperGrok reports none, so only its sessions show.
 
 ## Keep your data safe.
 
 - **Read on your computer**: the records your agents already keep. Usage history stays in a local SQLite database.
-- **Read from each vendor**: quotas and balances, with the agent's existing sign-in or configured key. No read sends a message to a model, and credentials are never stored.
+- **Read from each vendor**: quotas, balances and Grok Bot's daily tokens, with the agent's existing sign-in or configured key. No read sends a message to a model, and credentials are never stored.
 - **Written on your computer**: hooks in your agents' own settings, to receive requests and replies, only while client hooks are on. Turning them off removes them.
 - **Uploaded**: nothing, by a build from this source.
 - **Access your data from iPhone and Apple Watch**, through the release:

@@ -500,7 +500,11 @@ impl AgentHudCore {
                 log.live.parent_id = Some(parent.to_owned());
                 log.live.is_subagent = true;
             }
-            log.archived = row["archived"].as_bool().unwrap_or(false);
+            // A record that does not say leaves the session's archive state
+            // alone (Grok Bot's daily tokens beside its roster's sessions).
+            if let Some(archived) = row["archived"].as_bool() {
+                log.archived = archived;
+            }
             log.naming.name(0, row["title"].as_str());
             if let Some(fallback) = row["titleFallback"].as_str() {
                 log.naming.fallback(fallback);

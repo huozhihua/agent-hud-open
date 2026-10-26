@@ -1,6 +1,6 @@
 //! Grok Bot's personal quota, from the cache the Bot keeps itself. When the
 //! Bot read it stays the observation time: reading the file now does not
-//! make old data fresh.
+//! make old data fresh. Its tokens come from Cursor's servers (`usage.rs`).
 use super::cache as bot;
 use crate::account::{legacy_unresolved, locate, status, Host, Reading};
 use crate::naming::window_names;
@@ -37,14 +37,46 @@ pub fn read(host: &dyn Host) -> Result<Reading, String> {
         ));
         return Ok(r);
     };
-    let value =
-        bot::value_through(host, &directory, &bot::quota_key(&slot), 2).ok_or_else(|| {
-            l10n::text(
-                "Grok Bot 缓存额度不可用，请在 Bot 中刷新",
-                "Grok Bot cached quota is unavailable; refresh in Bot",
-            )
-        })?;
     let now = chrono::Utc::now().timestamp_millis();
+    let tokens = super::usage::read(host, &directory, &slot, now);
+    match (quota(host, &directory, &slot, now), tokens) {
+        (Ok(mut r), Ok(records)) => {
+            r.session_records = records;
+            Ok(r)
+        }
+        (Ok(mut r), Err(why)) => {
+            r.notice = Some(match r.notice.take() {
+                Some(notice) => format!("{notice} · {why}"),
+                None => why,
+            });
+            Ok(r)
+        }
+        // A stale quota cache does not hold the tokens back: the bots run
+        // whether or not the Bot was opened today.
+        (Err(why), Ok(records)) if !records.is_empty() => {
+            let mut r = Reading::empty("grok-bot");
+            r.session_records = records;
+            r.notice = Some(why);
+            Ok(r)
+        }
+        (Err(why), _) => Err(why),
+    }
+}
+
+/// The weekly quota the Bot's cache holds for `slot`.
+fn quota(
+    host: &dyn Host,
+    directory: &std::path::Path,
+    slot: &str,
+    now: i64,
+) -> Result<Reading, String> {
+    let mut r = Reading::empty("grok-bot");
+    let value = bot::value_through(host, directory, &bot::quota_key(slot), 2).ok_or_else(|| {
+        l10n::text(
+            "Grok Bot 缓存额度不可用，请在 Bot 中刷新",
+            "Grok Bot cached quota is unavailable; refresh in Bot",
+        )
+    })?;
     let (expires, observed) = (
         value["expiresAtMs"].as_i64(),
         value["reading"]["readAtMs"].as_i64(),
@@ -65,7 +97,7 @@ pub fn read(host: &dyn Host) -> Result<Reading, String> {
         ));
     }
     // The Swift app's account for this Bot slot; its rows are that app's `grok` windows.
-    let id = legacy_unresolved("Grok", &format!("grok-bot:{}", bot::hash(&[&slot])));
+    let id = legacy_unresolved("Grok", &format!("grok-bot:{}", bot::hash(&[slot])));
     let used = u["percentUsed"]
         .as_f64()
         .filter(|n| n.is_finite() && *n >= 0.)
@@ -92,7 +124,7 @@ pub fn read(host: &dyn Host) -> Result<Reading, String> {
         "额度来自 Grok Bot 缓存；在 Bot 中刷新可更新读数",
         "Quota from Grok Bot cache; refresh in Bot to update",
     ));
-    if bot::account_through(host, &directory) != Some(slot) {
+    if bot::account_through(host, directory).as_deref() != Some(slot) {
         return Err(l10n::text(
             "读取缓存期间 Grok Bot 账户发生了变化",
             "Grok Bot account changed while reading its cache",
