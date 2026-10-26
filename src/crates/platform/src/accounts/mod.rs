@@ -77,7 +77,7 @@ fn work_sources(provider: &str) -> &[&str] {
     match provider {
         "grok-bot" => &["grok-bot", "grok-cli"],
         "kimi" | "glm" | "opencode" => &["opencode", "kimi", "glm", "pi"],
-        // A relay is spent by the clients configured with it.
+        // A relay is read sooner while the clients it is found in work.
         "relay" => &["claude", "codex"],
         _ => READERS
             .iter()
@@ -418,10 +418,10 @@ impl AccountService {
         {
             enabled.insert("codex".into());
         }
-        // Relays are found in Claude Code's and Codex's configuration.
-        if enabled.contains("claude") || enabled.contains("codex") {
-            enabled.insert("relay".into());
-        }
+        // Relays are found in Claude Code's and Codex's configuration, or
+        // added by hand for any agent; with none, the reader reads two
+        // configuration files and asks nothing.
+        enabled.insert("relay".into());
         for provider in account_homes.keys() {
             if snapshot["providers"]
                 .as_array()

@@ -128,13 +128,24 @@ impl crate::AgentHudCore {
 
 /// The relays' price lists the relay reader brought (`services` rows of
 /// product `relay` with `prices`: per million tokens), per token in pico
-/// units, by relay host.
+/// units, by every route calls through the relay are recorded under: its
+/// host, and the Codex providers that point at it.
 fn route_prices(services: &[Value]) -> HashMap<String, pricing::RoutePrices> {
     services
         .iter()
         .filter(|row| row["product"] == "relay")
         .filter_map(|row| {
             let host = row["provider"].as_str()?;
+            let mut routes = row["routes"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .map(str::to_owned)
+                .collect::<Vec<_>>();
+            if !routes.iter().any(|route| route == host) {
+                routes.push(host.to_owned());
+            }
             let prices = &row["prices"];
             let currency = prices["currency"].as_str()?;
             let models = prices["models"]
@@ -151,15 +162,14 @@ fn route_prices(services: &[Value]) -> HashMap<String, pricing::RoutePrices> {
                 })
                 .collect::<HashMap<_, _>>();
             (!models.is_empty()).then(|| {
-                (
-                    host.to_owned(),
-                    pricing::RoutePrices {
-                        currency: currency.to_owned(),
-                        models,
-                    },
-                )
+                let prices = pricing::RoutePrices {
+                    currency: currency.to_owned(),
+                    models,
+                };
+                routes.into_iter().map(move |route| (route, prices.clone()))
             })
         })
+        .flatten()
         .collect()
 }
 
@@ -171,13 +181,17 @@ mod tests {
     #[test]
     fn a_relays_price_list_becomes_per_token_rates() {
         let services = vec![
-            json!({"product": "relay", "provider": "relay.example.com", "client": "claude",
+            json!({"product": "relay", "provider": "relay.example.com", "routes": ["relay.example.com", "myrelay"],
                    "prices": {"currency": "CNY", "models": {"claude-sonnet-4-5": [21.0, 105.0, 2.1, 26.25], "bad": [1.0]}}}),
-            json!({"product": "relay", "provider": "quiet.example.com", "client": "claude"}),
+            json!({"product": "relay", "provider": "quiet.example.com", "routes": ["quiet.example.com"]}),
             json!({"product": "coding-plan", "provider": "zai", "client": "claude", "prices": {"currency": "USD", "models": {"x": [1, 1, 1, 1]}}}),
         ];
         let prices = route_prices(&services);
-        assert_eq!(prices.len(), 1, "only a relay with a list");
+        assert_eq!(prices.len(), 2, "only a relay with a list, by each route");
+        assert_eq!(
+            prices["myrelay"], prices["relay.example.com"],
+            "a Codex provider that points at it"
+        );
         let relay = &prices["relay.example.com"];
         assert_eq!(relay.currency, "CNY");
         assert_eq!(

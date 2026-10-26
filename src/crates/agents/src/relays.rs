@@ -1,10 +1,13 @@
-//! Relays (中转站) the clients are configured with, and their balances
-//! (docs/proposals/no-plan-usage.md §5). A relay is found where a client
-//! keeps its address and key: Claude Code's settings.json `env` or this
-//! process's environment, Codex's `config.toml` providers. Nothing is asked
-//! of a relay until the owner agrees to it, address by address
-//! (`relayReading` in Agent HUD's settings); then the key the client already
-//! sends it is sent to that same address, and nowhere else, to read its
+//! Relays (中转站) and their balances (docs/proposals/no-plan-usage.md §5),
+//! one per address. A relay is found where a client keeps its address and
+//! key: Claude Code's settings.json `env` or this process's environment,
+//! Codex's `config.toml` providers; or the owner adds it by hand, for any
+//! agent. Which agents use it is the clients configured with it here, and
+//! the core adds the agents whose calls go through it. Nothing is asked of a
+//! relay found in a client's configuration until the owner agrees to it,
+//! address by address (`relayReading` in Agent HUD's settings); then a key
+//! a client already sends it is sent to that same address, and nowhere
+//! else, to read its
 //! balance. A few common templates are tried in turn: OpenRouter's credits,
 //! a New API site (one-api / new-api, told by its public `/api/status`), a
 //! Sub2API site's `/v1/usage`. When none fits, the owner may choose the
@@ -33,20 +36,44 @@ pub fn consent_key(host: &str) -> String {
     format!("{CONSENT}:{host}")
 }
 
-/// One relay a client is configured with.
+/// One relay, by its address.
 #[derive(Clone, Debug, PartialEq)]
 struct Target {
-    /// The client's source id: whose calls the relay carries.
-    client: String,
     /// The relay's host, as calls are recorded under it.
     host: String,
     /// `https://host[:port]`, where its own endpoints are.
     origin: String,
+    /// The key it is read with: the one added by hand, else the first
+    /// client's.
     key: String,
+    /// The clients configured with it (`claude`, `codex`).
+    clients: Vec<String>,
+    /// The routes its calls are recorded under: its host, the Codex
+    /// providers that point at it, and the provider name other agents give
+    /// a known one (`openrouter`).
+    routes: Vec<String>,
     /// What the owner said of a relay added by hand.
     manual: Option<Manual>,
     /// The template it is read with.
     choice: Choice,
+}
+
+impl Target {
+    fn new(host: String, key: String, kinds: &Value, legacy: Option<&Value>) -> Target {
+        let mut routes = vec![host.clone()];
+        if host == "openrouter.ai" {
+            routes.push("openrouter".into());
+        }
+        Target {
+            origin: format!("https://{host}"),
+            choice: Choice::of(kinds, &host, legacy),
+            host,
+            key,
+            clients: Vec::new(),
+            routes,
+            manual: None,
+        }
+    }
 }
 
 /// A relay the owner added by hand.
@@ -108,7 +135,7 @@ pub fn read(host: &dyn Host) -> Result<Reading, String> {
     let mut reading = Reading::empty("relay");
     for target in targets(host) {
         let consented = target.manual.is_some() || host.consented(&consent_key(&target.host));
-        let mut service = json!({"client": target.client, "provider": target.host, "product": "relay", "consented": consented});
+        let mut service = json!({"provider": target.host, "product": "relay", "clients": target.clients, "routes": target.routes, "consented": consented});
         if let Some(manual) = &target.manual {
             service["manual"] = json!(true);
             service["id"] = json!(manual.id);
@@ -137,12 +164,19 @@ pub fn read(host: &dyn Host) -> Result<Reading, String> {
                     if let Some(manual) = target.manual.as_ref().filter(|m| !m.name.is_empty()) {
                         found.label = manual.name.clone();
                     }
+                    let amount = (found.amount * 100.0).round() / 100.0;
+                    service["balance"] =
+                        json!({"label": found.label, "amount": amount, "currency": found.currency});
+                    // One balance per relay; the core shows it under every
+                    // agent that uses it.
                     reading.billing.push(json!({
-                        "id": format!("relay:{}:{}", target.client, target.host),
-                        "vendor": target.client,
-                        "consumerRoutes": [target.host],
+                        "id": format!("relay:{}", target.host),
+                        "vendor": "relay",
+                        "relay": target.host,
+                        "clients": target.clients,
+                        "consumerRoutes": target.routes,
                         "label": found.label,
-                        "amount": (found.amount * 100.0).round() / 100.0,
+                        "amount": amount,
                         "currency": found.currency,
                         "available": true,
                     }));
@@ -156,7 +190,7 @@ pub fn read(host: &dyn Host) -> Result<Reading, String> {
 }
 
 /// Every relay the owner added by hand, then every one the clients are
-/// configured with, once per client and host.
+/// configured with, once per address with the clients that use it.
 fn targets(host: &dyn Host) -> Vec<Target> {
     let mut found = Vec::<Target>::new();
     let saved = host
@@ -167,30 +201,26 @@ fn targets(host: &dyn Host) -> Vec<Target> {
     let kinds = &saved["kinds"];
     for source in saved["sources"].as_array().into_iter().flatten() {
         let text = |key: &str| source[key].as_str().map(str::to_owned);
-        let (Some(client), Some(base), Some(key), Some(id)) =
-            (text("client"), text("baseUrl"), text("key"), text("id"))
-        else {
+        let (Some(base), Some(key), Some(id)) = (text("baseUrl"), text("key"), text("id")) else {
             continue;
         };
         let Some(relay) = base_url_host(&base) else {
             continue;
         };
-        if found.iter().any(|t| t.client == client && t.host == relay) {
+        if found.iter().any(|t| t.host == relay) {
             continue;
         }
-        found.push(Target {
-            origin: format!("https://{relay}"),
-            client,
-            choice: Choice::of(kinds, &relay, Some(source)),
-            host: relay,
-            key,
-            manual: Some(Manual {
-                id,
-                name: text("name").unwrap_or_default(),
-            }),
+        let mut target = Target::new(relay, key, kinds, Some(source));
+        target.manual = Some(Manual {
+            id,
+            name: text("name").unwrap_or_default(),
         });
+        found.push(target);
     }
-    let mut add = |client: &'static str, base: Option<&str>, key: Option<&str>| {
+    let mut add = |client: &'static str,
+                   base: Option<&str>,
+                   key: Option<&str>,
+                   route: Option<&str>| {
         let (Some(base), Some(key)) = (base, key.map(str::trim).filter(|key| !key.is_empty()))
         else {
             return;
@@ -199,19 +229,24 @@ fn targets(host: &dyn Host) -> Vec<Target> {
         else {
             return;
         };
-        if key.bytes().any(|byte| matches!(byte, 0 | b'\r' | b'\n'))
-            || found.iter().any(|t| t.client == client && t.host == relay)
-        {
+        if key.bytes().any(|byte| matches!(byte, 0 | b'\r' | b'\n')) {
             return;
         }
-        found.push(Target {
-            client: client.to_owned(),
-            origin: format!("https://{relay}"),
-            choice: Choice::of(kinds, &relay, None),
-            host: relay,
-            key: key.to_owned(),
-            manual: None,
-        });
+        let at = match found.iter().position(|t| t.host == relay) {
+            Some(at) => at,
+            None => {
+                found.push(Target::new(relay, key.to_owned(), kinds, None));
+                found.len() - 1
+            }
+        };
+        let target = &mut found[at];
+        if !target.clients.iter().any(|known| known == client) {
+            target.clients.push(client.to_owned());
+        }
+        if let Some(route) = route.filter(|route| !target.routes.iter().any(|known| known == route))
+        {
+            target.routes.push(route.to_owned());
+        }
     };
     // Claude Code: its settings' env, then this process's own environment.
     let claude = variable(host, "CLAUDE_CONFIG_DIR").unwrap_or_else(|| host.home().join(".claude"));
@@ -221,14 +256,15 @@ fn targets(host: &dyn Host) -> Vec<Target> {
             let key = env["ANTHROPIC_AUTH_TOKEN"]
                 .as_str()
                 .or_else(|| env["ANTHROPIC_API_KEY"].as_str());
-            add("claude", env["ANTHROPIC_BASE_URL"].as_str(), key);
+            add("claude", env["ANTHROPIC_BASE_URL"].as_str(), key, None);
         }
     }
     let key = host
         .env("ANTHROPIC_AUTH_TOKEN")
         .or_else(|| host.env("ANTHROPIC_API_KEY"));
-    add("claude", host.env("ANTHROPIC_BASE_URL"), key);
-    // Codex: the providers its config.toml defines.
+    add("claude", host.env("ANTHROPIC_BASE_URL"), key, None);
+    // Codex: the providers its config.toml defines; its calls are recorded
+    // under the provider's id.
     let codex = variable(host, "CODEX_HOME").unwrap_or_else(|| host.home().join(".codex"));
     if let Some(bytes) = host
         .read_file(&codex.join("config.toml"), 1024 * 1024)
@@ -242,7 +278,12 @@ fn targets(host: &dyn Host) -> Vec<Target> {
                     .and_then(|name| host.env(name))
                     .map(str::to_owned)
             });
-            add("codex", Some(&provider.base_url), key.as_deref());
+            add(
+                "codex",
+                Some(&provider.base_url),
+                key.as_deref(),
+                Some(&provider.id),
+            );
         }
     }
     found
@@ -251,6 +292,8 @@ fn targets(host: &dyn Host) -> Vec<Target> {
 /// One `[model_providers.<id>]` table of a Codex `config.toml`.
 #[derive(Debug, Default, PartialEq)]
 struct CodexProvider {
+    /// The table's name, which its calls are recorded under.
+    id: String,
     base_url: String,
     env_key: Option<String>,
     bearer: Option<String>,
@@ -273,8 +316,12 @@ fn codex_providers(toml: &str) -> Vec<CodexProvider> {
             flush(&mut current);
             let table = line.trim_start_matches('[').trim_end_matches(']').trim();
             if let Some(id) = table.strip_prefix("model_providers.") {
-                if !id.trim_matches('"').contains('.') {
-                    current = Some(CodexProvider::default());
+                let id = id.trim().trim_matches('"');
+                if !id.contains('.') && !id.is_empty() {
+                    current = Some(CodexProvider {
+                        id: id.to_owned(),
+                        ..CodexProvider::default()
+                    });
                 }
             }
             continue;
@@ -674,7 +721,7 @@ mod tests {
         assert_eq!(
             reading.services,
             [
-                json!({"client": "claude", "provider": "relay.example.com", "product": "relay", "consented": false})
+                json!({"provider": "relay.example.com", "product": "relay", "clients": ["claude"], "routes": ["relay.example.com"], "consented": false})
             ]
         );
     }
@@ -704,9 +751,22 @@ mod tests {
         let reading = read(&host).unwrap();
         assert_eq!(reading.billing.len(), 1);
         let row = &reading.billing[0];
-        assert_eq!(row["vendor"], "claude");
+        assert_eq!(
+            (&row["id"], &row["vendor"], &row["relay"], &row["clients"]),
+            (
+                &json!("relay:relay.example.com"),
+                &json!("relay"),
+                &json!("relay.example.com"),
+                &json!(["claude"])
+            ),
+            "one balance per relay, shown by the core under its agents"
+        );
         assert_eq!(row["consumerRoutes"], json!(["relay.example.com"]));
         assert_eq!(row["label"], "Relay One");
+        assert_eq!(
+            reading.services[0]["balance"],
+            json!({"label": "Relay One", "amount": 5.0, "currency": "USD"})
+        );
         assert_eq!(row["amount"], 5.0);
         assert_eq!(row["currency"], "USD");
         assert_eq!(reading.services[0]["kind"], "newapi");
@@ -827,12 +887,17 @@ mod tests {
                 row["currency"].as_str(),
                 row["vendor"].as_str()
             ),
-            (Some("My relay"), Some(12.34), Some("CNY"), Some("claude"))
+            (Some("My relay"), Some(12.34), Some("CNY"), Some("relay"))
         );
         let service = &reading.services[0];
         assert_eq!(
             (service["manual"].as_bool(), service["consented"].as_bool()),
             (Some(true), Some(true))
+        );
+        assert_eq!(
+            service["clients"],
+            json!([]),
+            "added by hand for no agent in particular"
         );
         assert_eq!(
             (
@@ -947,7 +1012,7 @@ mod tests {
                 row["currency"].as_str(),
                 row["vendor"].as_str()
             ),
-            (Some(2.0), Some("USD"), Some("codex"))
+            (Some(2.0), Some("USD"), Some("relay"))
         );
     }
 
@@ -995,11 +1060,13 @@ base_url = "https://ignored.example.com"
             codex_providers(toml),
             [
                 CodexProvider {
+                    id: "relay".into(),
                     base_url: "https://relay.example.com/v1".into(),
                     env_key: Some("RELAY_KEY".into()),
                     bearer: None
                 },
                 CodexProvider {
+                    id: "inline".into(),
                     base_url: "https://other.example.com/v1".into(),
                     env_key: None,
                     bearer: Some("sk-inline".into())
@@ -1012,14 +1079,59 @@ base_url = "https://ignored.example.com"
         let listed = read(&host).unwrap().services;
         let hosts: Vec<_> = listed
             .iter()
-            .map(|s| (s["client"].clone(), s["provider"].clone()))
+            .map(|s| {
+                (
+                    s["provider"].clone(),
+                    s["clients"].clone(),
+                    s["routes"].clone(),
+                )
+            })
             .collect();
         assert_eq!(
             hosts,
             [
-                (json!("codex"), json!("relay.example.com")),
-                (json!("codex"), json!("other.example.com"))
+                (
+                    json!("relay.example.com"),
+                    json!(["codex"]),
+                    json!(["relay.example.com", "relay"])
+                ),
+                (
+                    json!("other.example.com"),
+                    json!(["codex"]),
+                    json!(["other.example.com", "inline"])
+                )
             ]
+        );
+    }
+
+    #[test]
+    fn a_relay_both_clients_use_is_read_once() {
+        let host = claude_relay(FakeHost::new("/u"), "https://pool.example.net/api")
+            .file(
+                "/u/.codex/config.toml",
+                "[model_providers.pool]\nbase_url = \"https://pool.example.net/v1\"\nexperimental_bearer_token = \"sk-codex\"\n",
+            )
+            .answer(
+                "https://pool.example.net/v1/usage",
+                Ok(json!({"remaining": 8.0, "unit": "USD"})),
+            );
+        host.consent.store(true, Ordering::Release);
+        let reading = read(&host).unwrap();
+        assert_eq!(reading.services.len(), 1);
+        assert_eq!(reading.services[0]["clients"], json!(["claude", "codex"]));
+        assert_eq!(
+            reading.billing[0]["consumerRoutes"],
+            json!(["pool.example.net", "pool"])
+        );
+        let asked = host.asked.borrow();
+        assert_eq!(
+            asked
+                .iter()
+                .filter(|(url, _)| url.ends_with("/v1/usage"))
+                .map(|(_, key)| key.clone())
+                .collect::<Vec<_>>(),
+            [Some("Bearer sk-relay".to_string())],
+            "once, with the first client's key"
         );
     }
 }

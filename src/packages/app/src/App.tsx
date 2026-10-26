@@ -24,6 +24,7 @@ import {
   Puzzle,
   RefreshCw,
   Settings2,
+  Waypoints,
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
 import { Button } from "@agent-hud/ui/components/button";
@@ -137,6 +138,15 @@ const pages = [
       "What Agent HUD adds to your coding agents. Everything here works on this Mac.",
   },
   {
+    // Relays, one per address, whichever agents use them.
+    id: "relays",
+    label: "Relays",
+    icon: Waypoints,
+    color: "#ff9500",
+    description:
+      "The relays your agents go through: who uses each, what it has left, and what kind it is.",
+  },
+  {
     id: "prices",
     label: "Prices",
     icon: Coins,
@@ -166,6 +176,7 @@ const chinesePages: Record<string, [string, string]> = {
     "智能体插件",
     "Agent HUD 为编程智能体添加的功能，都在这台 Mac 上运行。",
   ],
+  relays: ["中转站", "智能体经过的中转站：谁在用、还剩多少、是哪一类。"],
   prices: ["价格", "每个模型按什么价格算、价格从哪里来，不对时可以自己改。"],
   display: ["显示", "自定义灵动岛光晕与面板内容，更改自动生效。"],
   updates: ["更新", "管理 Agent HUD 更新与 Beta 参与设置。"],
@@ -818,6 +829,7 @@ function AppContent({
                         ?.render({ snapshot, request: extensionRequest })}
                       {(page === "general" ||
                         page === "prices" ||
+                        page === "relays" ||
                         page === "display" ||
                         page === "agents" ||
                         page === "agent-plugins") && (

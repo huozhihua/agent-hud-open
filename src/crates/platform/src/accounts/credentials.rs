@@ -391,14 +391,6 @@ fn relay_source(params: &Value) -> Result<Value, String> {
             .filter(|value| clean(value) && value.chars().count() <= limit)
     };
     let invalid = |what: &str, zh: &str| l10n::text(zh, what);
-    let client = text("client", 40)
-        .filter(|client| agent_hud_agents::by_id(client).is_some())
-        .ok_or_else(|| {
-            invalid(
-                "Choose which client uses the relay",
-                "请选择使用这个中转站的客户端",
-            )
-        })?;
     // Without a name, the relay's own name (or its address) is shown.
     let name = match params["name"].as_str().map(str::trim) {
         None | Some("") => "",
@@ -419,7 +411,8 @@ fn relay_source(params: &Value) -> Result<Value, String> {
     })?;
     let key =
         text("key", 4096).ok_or_else(|| invalid("Enter the relay's key", "请填写中转站的 key"))?;
-    Ok(json!({"client": client, "name": name, "baseUrl": address, "key": key}))
+    // Which agents use it is seen from their configuration and calls.
+    Ok(json!({"name": name, "baseUrl": address, "key": key}))
 }
 
 /// Replaces the relays file, privately and at once.
@@ -464,7 +457,8 @@ mod relay_source_tests {
         .unwrap();
         assert_eq!(
             source,
-            json!({"client": "claude", "name": "My relay", "baseUrl": "https://relay.example.com/v1", "key": "sk-1"})
+            json!({"name": "My relay", "baseUrl": "https://relay.example.com/v1", "key": "sk-1"}),
+            "no client: who uses it is seen, not said"
         );
         let unnamed = relay_source(&json!({
             "client": "codex", "baseUrl": "https://relay.example.com", "key": "sk-2"
@@ -472,7 +466,6 @@ mod relay_source_tests {
         .unwrap();
         assert_eq!(unnamed["name"], "");
         for bad in [
-            json!({"client": "nobody", "name": "a", "baseUrl": "https://r.example.com", "key": "k"}),
             json!({"client": "claude", "name": "a", "baseUrl": "http://r.example.com", "key": "k"}),
             json!({"client": "claude", "name": "a", "baseUrl": "https://u:p@r.example.com", "key": "k"}),
             json!({"client": "claude", "name": "a", "baseUrl": "https://r.example.com", "key": "k\nx"}),

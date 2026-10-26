@@ -9,7 +9,7 @@ use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection};
 use serde_json::{json, Value};
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     path::PathBuf,
 };
 
@@ -1366,6 +1366,34 @@ impl View {
         models
     }
 
+    /// The client sources whose calls since `since` went through each of
+    /// `routes` (what follows `#` in a recorded model), by route.
+    pub fn sources_by_route(
+        &self,
+        since: i64,
+        routes: &BTreeSet<&str>,
+    ) -> BTreeMap<String, BTreeSet<String>> {
+        let mut found = BTreeMap::<String, BTreeSet<String>>::new();
+        if routes.is_empty() {
+            return found;
+        }
+        for bucket in self.buckets.iter().filter(|bucket| bucket.at >= since) {
+            if let Some((_, route)) = bucket.model.split_once('#') {
+                if routes.contains(route)
+                    && !found
+                        .get(route)
+                        .is_some_and(|known| known.contains(&bucket.source))
+                {
+                    found
+                        .entry(route.to_owned())
+                        .or_default()
+                        .insert(bucket.source.clone());
+                }
+            }
+        }
+        found
+    }
+
     /// Each client's calls in the 24 hours before `now`, by the client's
     /// source id: their tokens and what they cost at list prices, from the
     /// selected logs' buckets already in memory.
@@ -2101,6 +2129,55 @@ mod retention_tests {
             .collect::<Vec<_>>();
         buckets.sort_by(|a, b| (a.2, &a.0, &a.1).cmp(&(b.2, &b.0, &b.1)));
         (view.replies.clone(), buckets)
+    }
+
+    #[test]
+    fn the_sources_through_a_route_are_the_ones_whose_calls_name_it() {
+        let db = Connection::open_in_memory().unwrap();
+        crate::database::schema(&db).unwrap();
+        let now = Utc::now().timestamp_millis();
+        let call = |key: &str, model: &str, at: i64| Event {
+            key: key.into(),
+            model: model.into(),
+            at,
+            usage: Usage {
+                input: 10,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        write(
+            &db,
+            "/logs/a.jsonl",
+            "claude",
+            &[
+                call("a1", "claude-sonnet-4-5#pool.example.net", now - 3_600_000),
+                call(
+                    "a2",
+                    "claude-sonnet-4-5#old.example.net",
+                    now - 40 * 86_400_000,
+                ),
+            ],
+        )
+        .unwrap();
+        write(
+            &db,
+            "/logs/b.jsonl",
+            "pi",
+            &[call("b1", "gpt-6#pool.example.net", now - 600_000)],
+        )
+        .unwrap();
+        let paths = vec!["/logs/a.jsonl".to_string(), "/logs/b.jsonl".to_string()];
+        let view = View::load(&db, &paths, now, &pricing::PriceRegions::default()).unwrap();
+        let routes = BTreeSet::from(["pool.example.net", "old.example.net", "quiet.example.net"]);
+        let found = view.sources_by_route(now - 30 * 86_400_000, &routes);
+        assert_eq!(
+            found,
+            BTreeMap::from([(
+                "pool.example.net".to_string(),
+                BTreeSet::from(["claude".to_string(), "pi".to_string()])
+            )])
+        );
     }
 
     #[test]

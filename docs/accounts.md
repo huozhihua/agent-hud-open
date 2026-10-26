@@ -123,19 +123,21 @@ files keep their bounded incremental replay and an explicit coverage state.
 
 ## Relays
 
-Claude Code and Codex can send their calls through a relay (中转站): Claude Code's `ANTHROPIC_BASE_URL` in `~/.claude/settings.json` `env` (or Agent HUD's own environment), Codex's `[model_providers.<id>]` `base_url` in `config.toml`. The relay reader (`agents::relays`) lists every relay host it finds there with the key configured beside it; official and vendor hosts are not relays. Settings shows each one on the client's page, off by default.
+Agents can send their calls through a relay (中转站). The relay reader (`agents::relays`) finds them where Claude Code and Codex keep the address and key: Claude Code's `ANTHROPIC_BASE_URL` in `~/.claude/settings.json` `env` (or Agent HUD's own environment), Codex's `[model_providers.<id>]` `base_url` in `config.toml`; official and vendor hosts are not relays. A relay is one row per address, whichever clients name it, and is read once with one key (one added by hand, else the first client's). Settings → Relays lists every relay with who uses it, its balance, its switch and its type; an agent's page lists only the relays it uses, with a link to that page.
 
-Nothing is sent to a relay until it is switched on (`relayReading`, a list of hosts). Then the key the client already sends that host is sent to the same host, over HTTPS, and nowhere else; Agent HUD keeps no copy of it. A few common templates are tried in turn, each on the relay's own address:
+Who uses a relay is seen, not said: the clients configured with it, then every agent whose calls in the last 30 days were recorded under one of its routes (its host, the Codex providers that point at it, and `openrouter` for `openrouter.ai`).
+
+Nothing is sent to a relay found in a client's configuration until it is switched on (`relayReading`, a list of hosts). Then the key the client already sends that host is sent to the same host, over HTTPS, and nowhere else; Agent HUD keeps no copy of it. A few common templates are tried in turn, each on the relay's own address:
 
 - OpenRouter (`openrouter.ai`): `/api/v1/credits` (credits left), else `/api/v1/key` (the key's remaining limit).
 - New API (one-api / new-api), told by its public `/api/status`: `/api/usage/token/` for the account's balance when the site lets the key read it, else the key's remaining quota, in the money the site shows; and its public `/api/pricing`, whose model and group ratios price the calls recorded under that relay's route.
 - Sub2API: `/v1/usage`.
 
-A balance becomes a billing row of the client (`vendor` `claude` or `codex`, `consumerRoutes` the host). A relay no template fits shows a notice and a "Choose type" button. The owner then picks one of the templates for that address, or describes its balance endpoint (custom: a GET path on the relay or an HTTPS address on its host, the JSON path of the balance, a divisor, USD or CNY, and optionally the header the key goes in). The choice is kept by host (`set_relay_kind`), so every client that uses the relay reads it the same way; choosing "find out" forgets it.
+A balance becomes one billing row per relay (`vendor` `relay`, `relay` the host, `consumerRoutes` its routes). The snapshot shows it once under each agent that uses it, as that agent's balance (`id` `relay:<agent>:<host>`), and under none when no agent does. A relay's price list prices the calls recorded under any of its routes. A relay no template fits shows a notice and a "Choose type" button. The owner then picks one of the templates for that address, or describes its balance endpoint (custom: a GET path on the relay or an HTTPS address on its host, the JSON path of the balance, a divisor, USD or CNY, and optionally the header the key goes in). The choice is kept by host (`set_relay_kind`), so every client that uses the relay reads it the same way; choosing "find out" forgets it.
 
 A relay's price list may name models its own way. A call's model is matched by its exact name, then without a date, then without a `vendor/` prefix and with dots read as dashes, as long as every such match has the same price.
 
-A relay can also be added by hand on the client's page: its HTTPS address, its key, and a name if the owner wants one (else the relay's own name or host is shown). It is kept with the other API credentials, and the chosen types, in the private `account-credentials/relays.json`, read without a separate switch, and the key is never shown back.
+A relay can also be added by hand on the Relays page, for any agent: its HTTPS address, its key, and a name if the owner wants one (else the relay's own name or host is shown). It belongs to no agent; who uses it is seen as above. It is kept with the other API credentials, and the chosen types, in the private `account-credentials/relays.json`, read without a separate switch, and the key is never shown back.
 
 ## Prices
 

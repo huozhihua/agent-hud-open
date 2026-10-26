@@ -4,8 +4,6 @@ import type {
   NativeMethod,
   PanelLayout,
   PanelBlockLayout,
-  RelayCustom,
-  RelayKind,
   Snapshot,
   SourcePreferences,
 } from "@agent-hud/protocol";
@@ -24,7 +22,12 @@ import {
   quotaRowMatches,
   withRowShown,
 } from "@agent-hud/hud/model";
-import { snapshotLanguage, quotaPercentLabel } from "@agent-hud/ui/format";
+import {
+  moneyAmount,
+  snapshotLanguage,
+  quotaPercentLabel,
+} from "@agent-hud/ui/format";
+import { useOpenSettingsPage } from "./settings/SettingsNavigation";
 interface Props {
   snapshot: Snapshot;
   action: (
@@ -60,9 +63,7 @@ export default function SourcesSettings({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [credentials, setCredentials] = useState<Record<string, string>>({});
-  const [adding, setAdding] = useState(false);
-  // The relay address whose type is being chosen by hand.
-  const [choosing, setChoosing] = useState<string | null>(null);
+  const openPage = useOpenSettingsPage();
   const zh = snapshotLanguage(snapshot) === "zh",
     t = (en: string, cn: string) => (zh ? cn : en);
   const providerOrder = (layout.order ?? []).map((key) =>
@@ -90,19 +91,10 @@ export default function SourcesSettings({
     (account) => source && vendorKey(account.provider) === vendorKey(source.id),
   );
   const accounts = [...new Set(windows.map(quotaAccountKey))];
-  // The relays this client is configured with, and the ones agreed to.
+  // The relays this agent uses; they are set up on the Relays page.
   const relays = (snapshot.relays ?? []).filter(
-    (relay) => source && relay.client === source.id,
+    (relay) => source && relay.agents.includes(source.id),
   );
-  const consented = snapshot.settings.relayReading ?? [];
-  // The clients whose relays can be added by hand.
-  const relayClients = ["claude", "codex"];
-  const relayKinds: Record<string, string> = {
-    newapi: "New API",
-    sub2api: "Sub2API",
-    openrouter: "OpenRouter",
-    custom: t("Custom endpoint", "自定义接口"),
-  };
   const fields = (
     (source?.accountStatus as unknown as { configurableFields?: string[] })
       ?.configurableFields ?? []
@@ -562,172 +554,47 @@ export default function SourcesSettings({
               </div>
             </section>
           )}
-          {(relays.length > 0 || relayClients.includes(source.id)) && (
+          {relays.length > 0 && (
             <section>
               <h3 style={{ fontSize: 14 }}>{t("Relays", "中转站")}</h3>
-              <p
-                style={{
-                  fontSize: 12,
-                  color: "var(--muted-foreground)",
-                  margin: "0 0 8px",
-                }}
-              >
-                {t(
-                  `Read a relay's balance with the key ${source.name} already uses for it. The key goes only to that address.`,
-                  `用 ${source.name} 已经为中转站配置的 key 读取它的余额。key 只发给这个地址。`,
-                )}
-              </p>
-              <div style={{ ...box, display: "grid", gap: 10 }}>
-                {relays.map((relay) => {
-                  const agreed = consented.includes(relay.provider);
-                  const shown = relay.chosen ?? relay.kind;
-                  const kind = shown
-                    ? relay.chosen
-                      ? `${relayKinds[shown]} · ${t("chosen by hand", "手选")}`
-                      : relayKinds[shown]
-                    : undefined;
-                  // The type is chosen by hand only when sniffing found none,
-                  // or to change a choice made before.
-                  const choosable =
-                    (relay.unrecognized || relay.chosen) &&
-                    (relay.manual || agreed);
-                  return (
-                    <div key={relay.id ?? relay.provider}>
-                      <div style={row}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <strong style={{ fontSize: 13 }}>
-                            {relay.name ?? relay.provider}
-                          </strong>
-                          <p
-                            style={{
-                              fontSize: 12,
-                              color: "var(--muted-foreground)",
-                              margin: "2px 0 0",
-                            }}
-                          >
-                            {[
-                              relay.manual
-                                ? `${relay.provider} · ${t("added by hand", "手动添加")}`
-                                : undefined,
-                              kind,
-                              relay.notice,
-                            ]
-                              .filter(Boolean)
-                              .join(" · ") ||
-                              t("Found in its configuration", "从配置中发现")}
-                          </p>
-                        </div>
-                        {choosable && choosing !== relay.provider && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            disabled={pending}
-                            onClick={() => setChoosing(relay.provider)}
-                          >
-                            {t("Choose type", "手选类型")}
-                          </Button>
-                        )}
-                        {relay.manual ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={pending}
-                            onClick={() =>
-                              void perform(() =>
-                                action("remove_relay_source", { id: relay.id }),
-                              )
-                            }
-                          >
-                            {t("Remove", "移除")}
-                          </Button>
-                        ) : (
-                          <Switch
-                            checked={agreed}
-                            disabled={pending}
-                            aria-label={t(
-                              `Read ${relay.provider}'s balance`,
-                              `读取 ${relay.provider} 的余额`,
-                            )}
-                            onCheckedChange={(value) =>
-                              void perform(() =>
-                                action("set_setting", {
-                                  key: "relayReading",
-                                  value: value
-                                    ? [...consented, relay.provider]
-                                    : consented.filter(
-                                        (host) => host !== relay.provider,
-                                      ),
-                                }),
-                              )
-                            }
-                          />
-                        )}
-                      </div>
-                      {choosing === relay.provider && (
-                        <RelayKindForm
-                          t={t}
-                          pending={pending}
-                          kind={relay.chosen ?? "auto"}
-                          custom={relay.custom}
-                          onCancel={() => setChoosing(null)}
-                          onSave={(choice) =>
-                            void perform(() =>
-                              action("set_relay_kind", {
-                                ...choice,
-                                host: relay.provider,
-                              }),
-                            ).then((saved) => {
-                              if (saved) setChoosing(null);
-                            })
-                          }
-                        />
-                      )}
+              <div style={{ ...box, display: "grid" }}>
+                {relays.map((relay) => (
+                  <div key={relay.provider} style={row}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <strong style={{ fontSize: 13 }}>
+                        {relay.name ?? relay.provider}
+                      </strong>
+                      <p
+                        style={{
+                          fontSize: 12,
+                          color: "var(--muted-foreground)",
+                          margin: "2px 0 0",
+                        }}
+                      >
+                        {relay.balance
+                          ? t("Balance ", "余额 ") +
+                            moneyAmount(
+                              relay.balance.amount,
+                              relay.balance.currency,
+                              snapshotLanguage(snapshot),
+                            )
+                          : !relay.consented
+                            ? t("Its balance is not read", "未开启读取余额")
+                            : (relay.notice ??
+                              t("Balance not read yet", "余额还没读到"))}
+                      </p>
                     </div>
-                  );
-                })}
-                {relays.length === 0 && (
-                  <p
-                    style={{
-                      ...row,
-                      fontSize: 12,
-                      color: "var(--muted-foreground)",
-                    }}
-                  >
-                    {t(
-                      `No relay was found in ${source.name}'s configuration.`,
-                      `${source.name} 的配置里没有找到中转站。`,
-                    )}
-                  </p>
-                )}
-                {relayClients.includes(source.id) &&
-                  (adding ? (
-                    <RelayForm
-                      t={t}
-                      pending={pending}
-                      onCancel={() => setAdding(false)}
-                      onSave={(relay) =>
-                        void perform(() =>
-                          action("add_relay_source", {
-                            ...relay,
-                            client: source.id,
-                          }),
-                        ).then((saved) => {
-                          if (saved) setAdding(false);
-                        })
-                      }
-                    />
-                  ) : (
-                    <div style={row}>
+                    {openPage && (
                       <Button
                         variant="outline"
                         size="sm"
-                        disabled={pending}
-                        onClick={() => setAdding(true)}
+                        onClick={() => openPage("relays")}
                       >
-                        {t("Add a relay", "添加中转站")}
+                        {t("Relay settings", "中转站设置")}
                       </Button>
-                    </div>
-                  ))}
+                    )}
+                  </div>
+                ))}
               </div>
             </section>
           )}
@@ -805,213 +672,5 @@ export default function SourcesSettings({
         </div>
       )}
     </div>
-  );
-}
-
-/** One labelled text field of the relay forms. */
-function relayField(
-  label: string,
-  value: string,
-  change: (value: string) => void,
-  options: { secret?: boolean; placeholder?: string } = {},
-) {
-  return (
-    <label style={{ display: "grid", gap: 4, fontSize: 12 }}>
-      {label}
-      <Input
-        type={options.secret ? "password" : "text"}
-        autoComplete="off"
-        value={value}
-        placeholder={options.placeholder}
-        onChange={(event) => change(event.target.value)}
-      />
-    </label>
-  );
-}
-
-/** The buttons under a relay form. */
-function relayFormButtons(
-  t: (en: string, zh: string) => string,
-  pending: boolean,
-  ready: boolean,
-  save: string,
-  onCancel: () => void,
-) {
-  return (
-    <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        disabled={pending}
-        onClick={onCancel}
-      >
-        {t("Cancel", "取消")}
-      </Button>
-      <Button type="submit" size="sm" disabled={pending || !ready}>
-        {save}
-      </Button>
-    </div>
-  );
-}
-
-/** A relay added by hand: its address and key, and a name if the owner wants
- * one. What kind of relay it is is found out when it is read. */
-function RelayForm({
-  t,
-  pending,
-  onSave,
-  onCancel,
-}: {
-  t: (en: string, zh: string) => string;
-  pending: boolean;
-  onSave: (relay: Record<string, unknown>) => void;
-  onCancel: () => void;
-}) {
-  const [name, setName] = useState("");
-  const [baseUrl, setBaseUrl] = useState("");
-  const [key, setKey] = useState("");
-  return (
-    <form
-      style={{ display: "grid", gap: 10, padding: 16 }}
-      onSubmit={(event) => {
-        event.preventDefault();
-        onSave({ name, baseUrl, key });
-      }}
-    >
-      {relayField(t("Address", "地址"), baseUrl, setBaseUrl, {
-        placeholder: "https://relay.example.com",
-      })}
-      {relayField(t("Key", "Key"), key, setKey, { secret: true })}
-      {relayField(t("Name (optional)", "名称（可不填）"), name, setName)}
-      <p style={{ fontSize: 11, color: "var(--muted-foreground)", margin: 0 }}>
-        {t(
-          "The key is kept privately on this Mac and sent only to this address.",
-          "key 只保存在这台 Mac 上，只发给这个地址。",
-        )}
-      </p>
-      {relayFormButtons(
-        t,
-        pending,
-        Boolean(baseUrl.trim() && key.trim()),
-        t("Add", "添加"),
-        onCancel,
-      )}
-    </form>
-  );
-}
-
-/** The type of a relay sniffing could not tell, chosen by hand for its
- * address: one of the common templates, or its own balance endpoint. */
-function RelayKindForm({
-  t,
-  pending,
-  kind: chosen,
-  custom: saved,
-  onSave,
-  onCancel,
-}: {
-  t: (en: string, zh: string) => string;
-  pending: boolean;
-  kind: RelayKind;
-  custom?: RelayCustom;
-  onSave: (choice: { kind: RelayKind; custom?: RelayCustom }) => void;
-  onCancel: () => void;
-}) {
-  const [kind, setKind] = useState<RelayKind>(chosen);
-  const [url, setUrl] = useState(saved?.url ?? "");
-  const [remaining, setRemaining] = useState(saved?.remaining ?? "");
-  const [divisor, setDivisor] = useState(String(saved?.divisor ?? 1));
-  const [currency, setCurrency] = useState<"USD" | "CNY">(
-    saved?.currency ?? "USD",
-  );
-  const [header, setHeader] = useState(saved?.header ?? "");
-  const kinds: [RelayKind, string][] = [
-    ["auto", t("Find out", "自动识别")],
-    ["newapi", "New API"],
-    ["sub2api", "Sub2API"],
-    ["openrouter", "OpenRouter"],
-    ["custom", t("Custom endpoint", "自定义接口")],
-  ];
-  const select: CSSProperties = { height: 30, borderRadius: 6, fontSize: 12 };
-  return (
-    <form
-      style={{ display: "grid", gap: 10, padding: "0 16px 16px" }}
-      onSubmit={(event) => {
-        event.preventDefault();
-        onSave(
-          kind === "custom"
-            ? {
-                kind,
-                custom: {
-                  url,
-                  remaining,
-                  divisor: Number(divisor) || 1,
-                  currency,
-                  header,
-                },
-              }
-            : { kind },
-        );
-      }}
-    >
-      <label style={{ display: "grid", gap: 4, fontSize: 12 }}>
-        {t("Type", "类型")}
-        <select
-          value={kind}
-          onChange={(event) => setKind(event.target.value as RelayKind)}
-          style={select}
-        >
-          {kinds.map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
-      </label>
-      {kind === "custom" && (
-        <>
-          {relayField(t("Balance endpoint", "余额接口"), url, setUrl, {
-            placeholder: t(
-              "/api/balance, on the relay's own address",
-              "/api/balance，须在中转站自己的地址上",
-            ),
-          })}
-          {relayField(
-            t("Balance in the answer", "余额在返回里的位置"),
-            remaining,
-            setRemaining,
-            { placeholder: "data.balance" },
-          )}
-          {relayField(t("Divide by", "除数"), divisor, setDivisor)}
-          <label style={{ display: "grid", gap: 4, fontSize: 12 }}>
-            {t("Currency", "币种")}
-            <select
-              value={currency}
-              onChange={(event) =>
-                setCurrency(event.target.value as "USD" | "CNY")
-              }
-              style={select}
-            >
-              <option value="USD">USD</option>
-              <option value="CNY">CNY</option>
-            </select>
-          </label>
-          {relayField(
-            t("Key header (optional)", "key 放在哪个请求头（可不填）"),
-            header,
-            setHeader,
-            { placeholder: "Authorization" },
-          )}
-        </>
-      )}
-      {relayFormButtons(
-        t,
-        pending,
-        kind !== "custom" || Boolean(url.trim() && remaining.trim()),
-        t("Save", "保存"),
-        onCancel,
-      )}
-    </form>
   );
 }

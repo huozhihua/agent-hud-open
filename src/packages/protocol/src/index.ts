@@ -645,13 +645,18 @@ export interface PriceList {
   relays: { host: string; multiplier: number | null; listed: boolean }[];
   localHosts: { host: string; kind: "model" | "gateway" | null }[];
 }
-/** A relay a client is configured with (Claude Code's settings env, Codex's providers). */
+/** A relay, one per address: found in Claude Code's settings env or Codex's providers, or added by hand. */
 export interface RelaySource {
-  client: string;
   /** The relay's host. */
   provider: string;
   product: "relay";
+  /** The clients configured with it. */
+  clients: string[];
+  /** Who uses it: those clients, then the agents whose calls went through it in the last 30 days. */
+  agents: string[];
   consented: boolean;
+  /** What it last reported, in its own money. */
+  balance?: { label: string; amount: number; currency: string };
   /** Which template answered: newapi, sub2api, openrouter, custom. */
   kind?: string;
   /** Why no balance was read. */
