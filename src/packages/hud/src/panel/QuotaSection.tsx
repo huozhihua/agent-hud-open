@@ -17,8 +17,10 @@ import {
   quotaPercent,
   quotaPercentLabel,
   quotaDisplayLabel,
+  tokensShort,
 } from "@agent-hud/ui/format";
 import { quotaAccountKey, quotaShortName, vendorKey } from "../model";
+import { recentCost, recentUsage } from "../recent-usage";
 import { FittingName } from "./FittingName";
 import { AccountHeader, BlockNotice } from "./AccountHeader";
 import { missingReadingNotice } from "./account-labels";
@@ -575,6 +577,12 @@ export const SourceProviderBlock = memo(function SourceProviderBlock({
   const missingNotice = missingReading
     ? missingReadingNotice(snapshot.providers, vendor)
     : null;
+  // Without a window, the block shows what the agent used in the last 24
+  // hours instead (vendors.rs `recent_label`).
+  const recent = missingReading
+    ? recentUsage(snapshot, vendorKey(vendor))
+    : null;
+  const recentMoney = recent ? recentCost(recent, format.language) : null;
   const countdown = layout.countdown ?? showReset;
   return (
     <section
@@ -648,16 +656,43 @@ export const SourceProviderBlock = memo(function SourceProviderBlock({
       ) : missingReading ? (
         <>
           {missingNotice && <BlockNotice text={missingNotice} light={light} />}
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              color: colors.secondary,
-            }}
-          >
-            <span>{format.language === "zh" ? "额度" : "Quota"}</span>
-            <strong>--</strong>
-          </div>
+          {recent ? (
+            <div
+              className="hud-source-recent"
+              title={
+                recent.unpricedTokens > 0
+                  ? format.language === "zh"
+                    ? `其中 ${new Intl.NumberFormat("en").format(recent.unpricedTokens)} 个 Token 来自没有 API 价格的模型，未计入花费`
+                    : `${new Intl.NumberFormat("en").format(recent.unpricedTokens)} of these tokens came from models with no API list price and are not in the cost`
+                  : undefined
+              }
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 8,
+                color: colors.secondary,
+              }}
+            >
+              <span>
+                {format.language === "zh" ? "最近 24 小时" : "Last 24 hours"}
+              </span>
+              <strong style={{ color: colors.text }}>
+                {`${tokensShort(recent.tokens)} Token`}
+                {recentMoney ? ` · ${recentMoney}` : ""}
+              </strong>
+            </div>
+          ) : (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                color: colors.secondary,
+              }}
+            >
+              <span>{format.language === "zh" ? "额度" : "Quota"}</span>
+              <strong>--</strong>
+            </div>
+          )}
         </>
       ) : (
         sections.map(({ key, rows: sectionRows, account, current }) => {

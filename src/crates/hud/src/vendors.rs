@@ -3,7 +3,7 @@
 //! `configuredVendors` do, for what the host draws itself: the menu bar item,
 //! the HUD windows' sizes and the Bots' directions.
 use crate::presentation::{mark, resting_agents};
-use serde_json::Value;
+use serde_json::{json, Value};
 
 pub struct Vendor<'a> {
     pub key: String,
@@ -14,6 +14,9 @@ pub struct Vendor<'a> {
     /// Sessions in flight: running, or waiting on a request.
     pub working: usize,
     pub balance: Option<String>,
+    /// What an agent with no window and no balance shows instead: its last
+    /// 24 hours at list prices, else their tokens (`recent_label`).
+    pub usage: Option<String>,
     pub quotas: Vec<&'a Value>,
     pub sessions: Vec<&'a Value>,
 }
@@ -66,6 +69,9 @@ pub fn vendors<'a>(snapshot: &'a Value, mode: &str, now_ms: i64) -> Vec<Vendor<'
                 balance: balance.map(|b| {
                     money_amount(&b["amount"], b["currency"].as_str().unwrap_or("USD"), zh)
                 }),
+                usage: (quotas.is_empty() && balance.is_none())
+                    .then(|| recent_label(snapshot, &key))
+                    .flatten(),
                 key,
                 quotas,
                 sessions,
@@ -112,12 +118,99 @@ pub fn quota_percent(used: f64, remaining: bool) -> f64 {
     }
 }
 
-/// The number a Simple HUD writes beside a mark.
+/// The number a Simple HUD writes beside a mark: its tightest window, else
+/// its balance, else its last 24 hours (model.ts `meterLabel`).
 pub fn meter_label(vendor: &Vendor, remaining: bool) -> String {
     match vendor.used {
         Some(used) => format!("{}%", quota_percent(used, remaining).round()),
-        None => vendor.balance.clone().unwrap_or_else(|| "--".into()),
+        None => vendor
+            .balance
+            .clone()
+            .or_else(|| vendor.usage.clone())
+            .unwrap_or_else(|| "--".into()),
     }
+}
+
+/// What the clients behind mark `key` used in the last 24 hours, as the
+/// snapshot's provider rows report it (`recent`), in a few characters
+/// (model.ts `recentLabel`): "≈$1.20" at list prices, with "+" when some of
+/// it has no list price or is in another currency, else "1.2M" tokens. None
+/// when they used nothing.
+pub fn recent_label(snapshot: &Value, key: &str) -> Option<String> {
+    let mut tokens = 0.0;
+    let mut unpriced = 0.0;
+    let mut costs = std::collections::BTreeMap::<String, f64>::new();
+    for recent in list(snapshot, "providers")
+        .filter(|provider| mark(provider["id"].as_str().unwrap_or("")) == key)
+        .map(|provider| &provider["recent"])
+        .filter(|recent| recent.is_object())
+    {
+        tokens += recent["tokens"].as_f64().unwrap_or(0.0);
+        unpriced += recent["unpricedTokens"].as_f64().unwrap_or(0.0);
+        for (currency, amount) in recent["costs"].as_object().into_iter().flatten() {
+            *costs.entry(currency.clone()).or_default() += amount.as_f64().unwrap_or(0.0);
+        }
+    }
+    if tokens <= 0.0 {
+        return None;
+    }
+    let shown = costs
+        .get_key_value("USD")
+        .or_else(|| costs.iter().next())
+        .map(|(currency, amount)| (currency.clone(), *amount));
+    Some(match shown {
+        Some((currency, amount)) => {
+            let more = unpriced > 0.0 || costs.len() > 1;
+            format!(
+                "≈{}{}",
+                money_short(amount, &currency),
+                if more { "+" } else { "" }
+            )
+        }
+        None => tokens_short(tokens),
+    })
+}
+
+/// format.ts `tokensShort`: 48_000 → "48k", 1_260 → "1.3k", 950 → "950",
+/// 2_400_000 → "2.4M"; a value that rounds up to the next unit reads in it.
+pub fn tokens_short(tokens: f64) -> String {
+    const UNITS: [(f64, &str); 3] = [(1e9, "B"), (1e6, "M"), (1e3, "k")];
+    // One decimal below ten, none from ten up; ties to even, as printf.
+    let trim = |value: f64| {
+        let one = format!("{value:.1}");
+        if value >= 10.0 || one.parse::<f64>().unwrap_or(0.0) >= 10.0 {
+            format!("{value:.0}")
+        } else {
+            one
+        }
+    };
+    for (index, (size, unit)) in UNITS.iter().enumerate() {
+        if tokens < *size {
+            continue;
+        }
+        let shown = trim(tokens / size);
+        if index > 0 && shown.parse::<f64>().unwrap_or(0.0) >= 1000.0 {
+            let (larger, larger_unit) = UNITS[index - 1];
+            return trim(tokens / larger) + larger_unit;
+        }
+        return shown + unit;
+    }
+    format!("{}", tokens.trunc())
+}
+
+/// format.ts `moneyShort`: whole units from a hundred up ("$412"), two
+/// decimals below ("$3.10"), "<$0.01" for a positive amount that rounds to none.
+pub fn money_short(amount: f64, code: &str) -> String {
+    let cents = format!("{amount:.2}");
+    let rounded = cents.parse::<f64>().unwrap_or(0.0);
+    if rounded == 0.0 && amount > 0.0 {
+        return format!("<{}", money_amount(&json!("0.01"), code, false));
+    }
+    if rounded.abs() >= 100.0 {
+        let text = money_amount(&json!(format!("{rounded:.0}")), code, false);
+        return text.strip_suffix(".00").map(str::to_owned).unwrap_or(text);
+    }
+    money_amount(&json!(cents), code, false)
 }
 
 /// agent-artwork.ts `agentVendorName`.
@@ -244,6 +337,63 @@ mod tests {
         assert_eq!(money_amount(&json!(0.125), "USD", false), "$0.12");
         assert_eq!(money_amount(&json!(0.135), "USD", false), "$0.14");
         assert_eq!(money_amount(&json!(1e-7), "USD", false), "$0.00");
+    }
+
+    #[test]
+    fn an_agent_with_no_window_or_balance_shows_its_last_24_hours() {
+        let snapshot = json!({
+            "quotas": [{"vendor": "kimi", "usedPercent": 30.0, "status": "normal"}],
+            "billing": [], "sessions": [], "approvals": [],
+            "providers": [
+                {"id": "hermes", "detected": true, "enabled": true,
+                 "recent": {"tokens": 1_260_000, "costs": {}, "unpricedTokens": 1_260_000}},
+                {"id": "claude", "detected": true, "enabled": true,
+                 "recent": {"tokens": 5_000, "costs": {"USD": 1.2}, "unpricedTokens": 0}},
+                {"id": "codex", "detected": true, "enabled": true,
+                 "recent": {"tokens": 9_000, "costs": {"USD": 412.5}, "unpricedTokens": 300}},
+                {"id": "kimi", "detected": true, "enabled": true,
+                 "recent": {"tokens": 9_000, "costs": {"CNY": 2.0}, "unpricedTokens": 0}},
+                {"id": "pi", "detected": true, "enabled": true, "recent": null}
+            ]
+        });
+        let rows = vendors(&snapshot, "simple", 0);
+        let label = |key: &str| {
+            let row = rows.iter().find(|row| row.key == key).unwrap();
+            meter_label(row, false)
+        };
+        assert_eq!(label("hermes"), "1.3M", "no price: its tokens");
+        assert_eq!(label("claude"), "≈$1.20", "priced: its cost");
+        assert_eq!(
+            label("openai"),
+            "≈$412+",
+            "partly priced: the priced part, then +"
+        );
+        assert_eq!(label("kimi"), "30%", "a window comes first");
+        assert_eq!(label("pi"), "--", "nothing used: nothing to show");
+    }
+
+    #[test]
+    fn short_tokens_and_money_read_as_format_ts_writes_them() {
+        for (tokens, text) in [
+            (950.0, "950"),
+            (1_260.0, "1.3k"),
+            (9_999.0, "10k"),
+            (48_000.0, "48k"),
+            (999_950.0, "1.0M"),
+            (2_400_000.0, "2.4M"),
+            (3_900_000_000.0, "3.9B"),
+        ] {
+            assert_eq!(tokens_short(tokens), text, "{tokens}");
+        }
+        for (amount, code, text) in [
+            (3.1, "USD", "$3.10"),
+            (412.5, "USD", "$412"),
+            (1_234.4, "USD", "$1,234"),
+            (0.004, "USD", "<$0.01"),
+            (8.85, "CNY", "¥8.85"),
+        ] {
+            assert_eq!(money_short(amount, code), text, "{amount}");
+        }
     }
 
     #[test]

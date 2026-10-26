@@ -302,6 +302,12 @@ export interface Provider {
   enabled: boolean;
   notice: string | null;
   sessions: number;
+  /** From Core: what the client's calls in the last 24 hours used and cost at list prices, money by currency; null when it made none. */
+  recent?: {
+    tokens: number;
+    costs: Record<string, number>;
+    unpricedTokens: number;
+  } | null;
   accountStatus?: {
     status: "loading" | "ready" | "error" | "unavailable";
     checkedAt: string | null;

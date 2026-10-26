@@ -7,6 +7,7 @@ import type {
 } from "@agent-hud/protocol";
 import { agentArtworkKey, agentVendorName } from "./agent-artwork";
 import { restingAgents } from "./resting-agents.ts";
+import { recentLabel, recentUsage } from "./recent-usage.ts";
 import type { GlowEffect, GlowStyle } from "./HUDGlow";
 import {
   moneyAmount,
@@ -114,6 +115,8 @@ export interface HUDVendor {
   working: number;
   waiting: number;
   balance: string | null;
+  /** What an agent with no window and no balance shows instead: its last 24 hours at list prices, else their tokens (`recentLabel`). */
+  usage: string | null;
   quotas: Snapshot["quotas"];
   sessions: Snapshot["sessions"];
 }
@@ -175,6 +178,10 @@ export function vendorsFromSnapshot(
             snapshotLanguage(snapshot),
           )
         : null,
+      usage:
+        quotas.length || balance
+          ? null
+          : recentLabel(recentUsage(snapshot, key), snapshotLanguage(snapshot)),
       quotas,
       sessions,
     };
@@ -192,9 +199,10 @@ export function quotaShortName(quota: {
   return quota.shortLabel || quota.name;
 }
 
+/** The number a Simple HUD writes beside a mark: its tightest window, else its balance, else its last 24 hours (vendors.rs `meter_label`). */
 export function meterLabel(vendor: HUDVendor, display?: QuotaDisplay): string {
   return vendor.used == null
-    ? (vendor.balance ?? "--")
+    ? (vendor.balance ?? vendor.usage ?? "--")
     : quotaPercentLabel(vendor.used, display);
 }
 

@@ -218,7 +218,7 @@ impl crate::AgentHudCore {
         let now = wall_clock_ms();
         let sessions = self.session_rows(presented_at, now, at);
         let approvals = self.requests.views(now);
-        let providers = self.provider_rows();
+        let providers = self.provider_rows(at);
         let pending_meter = self.pending_meter_bounds();
         // Pausing a failed read stops the indexing timer, but does not make
         // its unread history complete. Consumers use this fact, not notices.
@@ -468,12 +468,20 @@ impl crate::AgentHudCore {
         ListedRows { rows, ids }
     }
 
-    /// Every client Agent HUD knows, with what was found of it and its account.
-    fn provider_rows(&self) -> Vec<Value> {
+    /// Every client Agent HUD knows, with what was found of it and its account,
+    /// and `recent`: what its calls in the 24 hours before `at` used and cost
+    /// at list prices (null when none were made).
+    fn provider_rows(&self, at: i64) -> Vec<Value> {
         let projection = self
             .usage_projection
             .as_ref()
             .expect("usage projection prepared");
+        let recent = self
+            .meters
+            .view
+            .as_ref()
+            .map(|view| view.recent(at))
+            .unwrap_or_default();
         agent_hud_agents::ALL
             .iter()
             .map(|provider| {
@@ -499,7 +507,7 @@ impl crate::AgentHudCore {
                 // A source's notice is what its account reading says; how a
                 // reader works is not the person's concern (Open shows none).
                 let notice = Value::Null;
-                let mut row = json!({"id":id,"name":provider.name,"detected":detected,"enabled":self.enabled.get(id).copied().unwrap_or(true),"notice":notice,"sessions":projection.counts.get(id).copied().unwrap_or_default(),"discovery":discovery,"dataStatus":if provider.sessions {"supported"} else {"detection-only"}});
+                let mut row = json!({"id":id,"name":provider.name,"recent":recent.get(id).map(metering::Recent::json),"detected":detected,"enabled":self.enabled.get(id).copied().unwrap_or(true),"notice":notice,"sessions":projection.counts.get(id).copied().unwrap_or_default(),"discovery":discovery,"dataStatus":if provider.sessions {"supported"} else {"detection-only"}});
                 if let Some(account) = self.accounts.providers.get(id) {
                     row["accountStatus"] = account.clone();
                     row["notice"] = account["notice"].clone();

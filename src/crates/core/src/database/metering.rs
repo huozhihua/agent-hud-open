@@ -1050,6 +1050,33 @@ impl Reply {
 }
 
 const WEEK_MS: i64 = 7 * 86_400_000;
+/// How far back an agent's recent usage reaches (`View::recent`), as the
+/// hover panel's token chart reaches back 24 hours.
+const RECENT_MS: i64 = 86_400_000;
+
+/// What one client's calls in the last 24 hours used and cost at list
+/// prices (`View::recent`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct Recent {
+    /// Every kind, cache reads included, as the token chart counts them.
+    pub tokens: u64,
+    /// The calls with a list price, in pico units by currency.
+    pub costs: BTreeMap<String, i128>,
+    /// The tokens of the calls with no list price.
+    pub unpriced_tokens: u64,
+}
+
+impl Recent {
+    pub fn json(&self) -> Value {
+        json!({
+            "tokens": self.tokens,
+            "costs": self.costs.iter()
+                .map(|(currency, pico)| (currency.clone(), *pico as f64 / 1e12))
+                .collect::<BTreeMap<_, _>>(),
+            "unpricedTokens": self.unpriced_tokens,
+        })
+    }
+}
 
 /// The calls the reply rate reads, as SQL over `usage_meter_event`: what
 /// `reply_span` keeps, before its rate check.
@@ -1319,6 +1346,29 @@ impl View {
             .collect();
         self.valid_until = valid_until;
         self.loaded_at = now;
+    }
+
+    /// Each client's calls in the 24 hours before `now`, by the client's
+    /// source id: their tokens and what they cost at list prices, from the
+    /// selected logs' buckets already in memory.
+    pub fn recent(&self, now: i64) -> HashMap<String, Recent> {
+        let mut recent = HashMap::<String, Recent>::new();
+        for bucket in self
+            .buckets
+            .iter()
+            .filter(|bucket| bucket.at > now - RECENT_MS && bucket.at <= now)
+        {
+            let tokens = bucket.usage.total();
+            let sums = recent.entry(bucket.source.clone()).or_default();
+            sums.tokens += tokens;
+            match &bucket.cost {
+                Some(cost) => {
+                    *sums.costs.entry(cost.currency.clone()).or_default() += cost.amount_pico;
+                }
+                None => sums.unpriced_tokens += tokens,
+            }
+        }
+        recent
     }
 
     pub fn metrics(
@@ -2033,6 +2083,89 @@ mod retention_tests {
             .collect::<Vec<_>>();
         buckets.sort_by(|a, b| (a.2, &a.0, &a.1).cmp(&(b.2, &b.0, &b.1)));
         (view.replies.clone(), buckets)
+    }
+
+    #[test]
+    fn recent_usage_sums_each_clients_last_day_with_its_unpriced_part() {
+        let db = Connection::open_in_memory().unwrap();
+        crate::database::schema(&db).unwrap();
+        let now = Utc::now().timestamp_millis();
+        let used = Usage {
+            input: 1_000,
+            output: 100,
+            ..Default::default()
+        };
+        let call = |key: &str, model: &str, at: i64| Event {
+            key: key.into(),
+            model: model.into(),
+            at,
+            usage: used,
+            ..Default::default()
+        };
+        write(
+            &db,
+            "/logs/a.jsonl",
+            "claude",
+            &[
+                call("a1", "claude-sonnet-4-5", now - 2 * 86_400_000),
+                call("a2", "claude-sonnet-4-5", now - 3_600_000),
+                call("a3", "qwen3-coder:30b", now - 1_800_000),
+            ],
+        )
+        .unwrap();
+        write(
+            &db,
+            "/logs/b.jsonl",
+            "codex",
+            &[call("b1", "gpt-6-sol", now - 600_000)],
+        )
+        .unwrap();
+        write(
+            &db,
+            "/logs/c.jsonl",
+            "codex",
+            &[call("c1", "gpt-6-sol", now - 600_000)],
+        )
+        .unwrap();
+        let paths = vec!["/logs/a.jsonl".to_string(), "/logs/b.jsonl".to_string()];
+        let view = View::load(&db, &paths, now, &pricing::PriceRegions::default()).unwrap();
+        let recent = view.recent(now);
+        let price = |source: &str, model: &str| {
+            pricing::cost_at(
+                source,
+                model,
+                &price_tokens(used),
+                false,
+                pricing::Region::International,
+                Some(now),
+            )
+            .unwrap()
+            .amount_pico
+        };
+        let claude = &recent["claude"];
+        assert_eq!(
+            claude.tokens,
+            2 * used.total(),
+            "the day-old call is left out"
+        );
+        assert_eq!(
+            claude.unpriced_tokens,
+            used.total(),
+            "the local model has no price"
+        );
+        assert_eq!(
+            claude.costs,
+            BTreeMap::from([("USD".to_string(), price("claude", "claude-sonnet-4-5"))])
+        );
+        let codex = &recent["codex"];
+        assert_eq!(codex.tokens, used.total(), "the unselected log is left out");
+        assert_eq!(codex.unpriced_tokens, 0);
+        assert_eq!(codex.costs["USD"], price("codex", "gpt-6-sol"));
+        assert_eq!(codex.json()["unpricedTokens"], 0);
+        assert!(
+            view.recent(now + 3 * 86_400_000).is_empty(),
+            "a day later nothing is recent"
+        );
     }
 
     #[test]
