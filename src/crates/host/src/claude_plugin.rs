@@ -47,7 +47,10 @@ impl ClaudePlugin {
         let claude_config = super::mcp_clients::home()
             .map(|home| plugin::claude_config_directory(&home))
             .unwrap_or_default();
-        Arc::new(ClaudeReplies::new(self.channel.clone(), claude_config))
+        Arc::new(
+            ClaudeReplies::new(self.channel.clone(), claude_config)
+                .recording_deliveries(agent_hud_runtime::local_tools_directory().ok()),
+        )
     }
 }
 

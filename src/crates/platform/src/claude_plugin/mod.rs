@@ -453,6 +453,9 @@ pub struct ClaudeReplies {
     channel: ClaudeChannel,
     /// Claude Code's own folder, where it lists the plugins it installed.
     claude_config: PathBuf,
+    /// The data folder whose hook inbox records that the HUD sent an answer
+    /// (`hooks::record_delivery`); none records nothing.
+    deliveries: Option<PathBuf>,
 }
 
 impl ClaudeReplies {
@@ -460,7 +463,16 @@ impl ClaudeReplies {
         Self {
             channel,
             claude_config,
+            deliveries: None,
         }
+    }
+
+    /// Records each answer left for a session as typed in Agent HUD on this
+    /// Mac (`desktop:agenthud`), so a session's latest tag names the HUD and
+    /// not a phone that sent it something earlier (`naming::surfaces`).
+    pub fn recording_deliveries(mut self, data: Option<PathBuf>) -> Self {
+        self.deliveries = data;
+        self
     }
 
     /// Why words would not reach `session`, which has not checked in lately,
@@ -522,23 +534,35 @@ impl SessionReplies for ClaudeReplies {
         if source != agent_hud_agents::claude::AGENT.id {
             return Err(not_claude());
         }
-        self.channel
-            .hand(session, words, SystemTime::now())
-            .map(drop)
-            .map_err(|refusal| match refusal {
-                Refusal::NotLoaded => self.unreachable(session).note,
-                Refusal::Rejected(_) => l10n::text(
-                    "插件不能发送以 / 开头的话。",
-                    "The plugin can't send words that start with /.",
-                ),
-                Refusal::InvalidInput(_) => {
-                    l10n::text("没有要发送的话。", "There is nothing to send.")
-                }
-                _ => l10n::text(
-                    "回答没能交给 Claude Code 插件。",
-                    "The answer could not be left for the Claude Code plugin.",
-                ),
-            })
+        let now = SystemTime::now();
+        let handed = self.channel.hand(session, words, now);
+        if let (Ok(_), Some(data)) = (&handed, &self.deliveries) {
+            use agent_hud_agents::naming::surfaces::{Category, Surface, AGENT_HUD};
+            let at = now
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .map(|since| since.as_millis() as i64)
+                .unwrap_or_default();
+            // A tag is a label: a failed write only leaves the log's tag.
+            let _ = crate::hooks::record_delivery(
+                data,
+                source,
+                session,
+                &Surface::new(Category::Desktop, AGENT_HUD),
+                at,
+            );
+        }
+        handed.map(drop).map_err(|refusal| match refusal {
+            Refusal::NotLoaded => self.unreachable(session).note,
+            Refusal::Rejected(_) => l10n::text(
+                "插件不能发送以 / 开头的话。",
+                "The plugin can't send words that start with /.",
+            ),
+            Refusal::InvalidInput(_) => l10n::text("没有要发送的话。", "There is nothing to send."),
+            _ => l10n::text(
+                "回答没能交给 Claude Code 插件。",
+                "The answer could not be left for the Claude Code plugin.",
+            ),
+        })
     }
 }
 

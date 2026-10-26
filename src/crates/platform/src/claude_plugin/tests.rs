@@ -126,6 +126,31 @@ fn a_session_runs_the_plugin_while_it_checks_in() {
 }
 
 #[test]
+fn the_huds_answer_records_the_hud_as_its_sender() {
+    let temp = tempfile::tempdir().unwrap();
+    let channel = ClaudeChannel::new(temp.path().join("channel"));
+    let data = temp.path().join("data");
+    let replies = ClaudeReplies::new(channel.clone(), temp.path().join("claude-config"))
+        .recording_deliveries(Some(data.clone()));
+    assert!(replies.reply("claude", SESSION, "Ship it").is_err());
+    assert!(
+        !data.join("hooks/inbox").exists(),
+        "words never left record nothing"
+    );
+    check_in(&channel, SESSION, br#"{"at":1}"#);
+    replies.reply("claude", SESSION, "Ship it").unwrap();
+    let records = fs::read_dir(data.join("hooks/inbox"))
+        .unwrap()
+        .flatten()
+        .filter_map(|entry| fs::read(entry.path()).ok())
+        .filter_map(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+        .collect::<Vec<_>>();
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0]["kind"], "delivery");
+    assert_eq!(records[0]["data"]["surface"], "desktop:agenthud");
+}
+
+#[test]
 fn the_huds_answer_goes_to_a_loaded_session_and_tidies_what_was_taken() {
     let temp = tempfile::tempdir().unwrap();
     let channel = ClaudeChannel::new(temp.path().to_path_buf());
