@@ -56,8 +56,12 @@ mod tests {
     #[test]
     fn a_turn_with_tokens_is_appended_to_its_month_and_old_months_go() {
         let data = tempfile::tempdir().unwrap();
+        // Made as the app makes them: on Windows a plain folder made by an
+        // elevated process belongs to Administrators, which the owner check
+        // rightly refuses.
         let folder = data.path().join("clients/cursor");
-        fs::create_dir_all(&folder).unwrap();
+        crate::os::private_directory(&data.path().join("clients")).unwrap();
+        crate::os::private_directory(&folder).unwrap();
         fs::write(folder.join("turns-2026-08.jsonl"), "{}\n").unwrap();
         fs::write(folder.join("turns-2026-09.jsonl"), "{}\n").unwrap();
         let usage = json!({"input": 100, "output": 7, "read": 600, "write": 0, "reasoning": 0});
