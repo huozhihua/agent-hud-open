@@ -248,7 +248,8 @@ mod tests {
     /// and folders the collector never reads.
     fn codex_home() -> (tempfile::TempDir, PathBuf, Vec<PathBuf>) {
         let home = tempfile::tempdir().unwrap();
-        let codex = home.path().join(".codex");
+        // macOS reports the real path of a temporary folder (/private/var/...).
+        let codex = home.path().canonicalize().unwrap().join(".codex");
         fs::create_dir_all(codex.join("sessions/2026/10")).unwrap();
         fs::create_dir_all(codex.join(".tmp/plugins/a/b")).unwrap();
         fs::write(codex.join("session_index.jsonl"), "").unwrap();
