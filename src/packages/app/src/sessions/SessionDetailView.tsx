@@ -35,10 +35,7 @@ import {
   ColorKey,
   compact,
   cost,
-  Dot,
-  dotColor,
   durationLabel,
-  inFlight,
   integer,
   kindColor,
   kindNames,
@@ -48,7 +45,6 @@ import {
   row,
   sessionMoney,
   sinceLabel,
-  stateLabel,
   timeLabel,
   type Entry,
   type Theme,
@@ -430,7 +426,7 @@ export function DetailFigures({
   );
 }
 
-/** The session's name and state: a pill that says it and for how long, then model, project, client, start and duration. */
+/** The session's name, a pill with how long ago its last message was, then model, project, client, start and duration. */
 function DetailHeader({
   session,
   detail,
@@ -439,14 +435,11 @@ function DetailHeader({
   theme,
   reveal,
   revealLabel,
-  live,
 }: {
   session: Session;
   detail: SessionDetail | null;
   client: string;
   now: number;
-  /** Whether the client's live status is on; off, the pill names no state. */
-  live: boolean;
   theme: Theme;
   reveal: (() => void) | null;
   revealLabel: string;
@@ -457,20 +450,13 @@ function DetailHeader({
     detail?.turns[0]?.timestamp ??
     session.startedAt ??
     null;
-  // A session in flight lasts until now, as Open's header counts it.
-  const endedRaw = inFlight(session)
-    ? new Date(now).toISOString()
-    : (detail?.updatedAt ??
-      detail?.turns.at(-1)?.end ??
-      session.updatedAt ??
-      null);
+  const endedRaw =
+    detail?.updatedAt ?? detail?.turns.at(-1)?.end ?? session.updatedAt ?? null;
   const started = startedRaw ? timeLabel(startedRaw, zh) : "—";
   const duration =
     startedRaw && endedRaw
       ? durationLabel(Date.parse(startedRaw), Date.parse(endedRaw), zh)
       : "—";
-  const color =
-    session.state === "idle" ? theme.secondary : dotColor(session, theme);
   return (
     <div
       className="session-statistics-detail-header"
@@ -522,18 +508,14 @@ function DetailHeader({
             gap: 6,
             fontSize: 11,
             fontWeight: 600,
-            color,
+            color: theme.secondary,
             padding: "2px 8px",
             borderRadius: 999,
-            background: `color-mix(in srgb, ${color} 16%, transparent)`,
-            transition: "color 200ms ease, background-color 200ms ease",
+            background: `color-mix(in srgb, ${theme.secondary} 16%, transparent)`,
             ...numeric,
           }}
         >
-          <Dot session={session} theme={theme} size={6} />
-          {[stateLabel(session, live, zh), sinceLabel(session, now, zh)]
-            .filter(Boolean)
-            .join(" · ")}
+          {sinceLabel(session, now, zh)}
         </span>
         <HUDLogo source={session.source} size={13} light={theme.light} />
         <span style={{ ...clipped, flex: 1 }} title={session.cwd ?? client}>
@@ -1087,7 +1069,6 @@ function SubagentsCard({
                 id: child.id,
                 label: (
                   <span style={{ ...row, gap: 6 }}>
-                    <Dot session={child} theme={theme} size={6} />
                     <span style={clipped}>
                       {child.title || child.modelName || child.model}
                     </span>
@@ -1308,11 +1289,8 @@ export function InlineDetail({
   reveal,
   loadMessages,
   loadingMessages,
-  live,
 }: {
   session: Session;
-  /** Whether the session's client has its live status on. */
-  live: boolean;
   detail: SessionDetail | null;
   loading: boolean;
   error: string | null;
@@ -1338,7 +1316,6 @@ export function InlineDetail({
     entries.length > 0 &&
     entries.every((entry) => entry.listCost != null);
   const shown: Measure = priced ? measure : "tokens";
-  const running = byPrompt && session.state === "running";
   const hasContext = entries.some((entry) => entry.context != null);
   const lastMessage = session.liveFacts?.message?.trim();
   const children = detail?.children ?? [];
@@ -1353,7 +1330,6 @@ export function InlineDetail({
         client={client}
         now={now}
         theme={theme}
-        live={live}
         // The runtime's open_session goes back to the session where its client
         // names a place, else shows its log; the label says which.
         reveal={session.navigationTarget || session.logPath ? reveal : null}
@@ -1474,7 +1450,6 @@ export function InlineDetail({
               <TurnBarsChart
                 entries={entries}
                 measure={shown}
-                running={running}
                 selected={selectedEntry}
                 onSelect={(entry) =>
                   onEntry(selectedEntry === entry.id ? null : entry.id)

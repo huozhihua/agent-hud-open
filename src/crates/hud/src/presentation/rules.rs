@@ -23,8 +23,6 @@ const SESSION_PERIODS: &[&str] = &["day", "week"];
 const STORED_SESSION_PERIODS: &[&str] = &[
     "day", "week", "active", "recent", "all", "1h", "6h", "12h", "24h", "48h", "7d",
 ];
-const SESSION_SORTS: &[&str] = &["active", "date"];
-const SESSION_STATES: &[&str] = &["running", "waiting", "idle", "unverified", "ended"];
 const DEFAULT_COLUMNS: i64 = 4;
 const DEFAULT_WIDTH: i64 = 540;
 
@@ -434,16 +432,14 @@ pub(super) fn normalize_layout(value: &Value) -> Result<Value, String> {
     if let Some(limit) = whole(&sessions["limit"]).filter(|n| (1..=10).contains(n) && *n != 5) {
         v.insert("limit".into(), json!(limit));
     }
-    for (key, offered, default) in [
-        ("period", STORED_SESSION_PERIODS, "day"),
-        ("sort", SESSION_SORTS, "active"),
-    ] {
-        if let Some(value) = sessions[key]
-            .as_str()
-            .filter(|s| offered.contains(s) && *s != default)
-        {
-            v.insert(key.into(), json!(value));
-        }
+    // A layout saved with a sort or states keeps neither: the panel lists
+    // sessions by their last message and filters by no state (owner,
+    // 2026-10-26).
+    if let Some(period) = sessions["period"]
+        .as_str()
+        .filter(|s| STORED_SESSION_PERIODS.contains(s) && *s != "day")
+    {
+        v.insert("period".into(), json!(period));
     }
     for key in ["agents", "projects"] {
         let mut values = strings(&sessions[key]);
@@ -451,15 +447,6 @@ pub(super) fn normalize_layout(value: &Value) -> Result<Value, String> {
         if !values.is_empty() {
             v.insert(key.into(), json!(values));
         }
-    }
-    let states = strings(&sessions["states"]);
-    let states: Vec<&str> = SESSION_STATES
-        .iter()
-        .copied()
-        .filter(|s| states.iter().any(|v| v == s))
-        .collect();
-    if !states.is_empty() {
-        v.insert("states".into(), json!(states));
     }
     if !v.is_empty() {
         out.insert("sessions".into(), Value::Object(v));
@@ -1168,7 +1155,6 @@ fn session_misreadings(value: &Value) -> Vec<String> {
                 }
             }
             "period" => found.extend(misnamed(value, "sessions.period", SESSION_PERIODS)),
-            "sort" => found.extend(misnamed(value, "sessions.sort", SESSION_SORTS)),
             "agents" => {
                 found.extend(names(value, "sessions.agents", None));
                 found.extend(empty_names(value, "sessions.agents", "an agent's name from get_hud's sessions.offeredAgents."));
@@ -1177,8 +1163,8 @@ fn session_misreadings(value: &Value) -> Vec<String> {
                 found.extend(names(value, "sessions.projects", None));
                 found.extend(empty_names(value, "sessions.projects", "a project's id from get_hud's sessions.offeredProjects, or a path inside one."));
             }
-            "states" => found.extend(names(value, "sessions.states", Some(SESSION_STATES))),
-            _ => found.push(format!("sessions has no property \"{property}\"; sessions take limit, period, sort, agents, projects and states.")),
+            "sort" | "states" => found.push(format!("sessions.{property}: the panel lists sessions newest last message first and filters them by no state, so sessions take no {property}; they take limit, period, agents and projects.")),
+            _ => found.push(format!("sessions has no property \"{property}\"; sessions take limit, period, agents and projects.")),
         }
     }
     found

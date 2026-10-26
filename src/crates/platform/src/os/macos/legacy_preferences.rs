@@ -211,16 +211,14 @@ fn layout(value: &Value) -> Value {
         if value[key].is_object() {
             let arrays = match key {
                 "hud" => vec!["agents"],
-                "sessions" => vec!["agents", "projects", "states"],
+                "sessions" => vec!["agents", "projects"],
                 _ => vec!["agents", "models"],
             };
             out.insert(
                 key.into(),
                 Value::Object(public_fields(
                     &value[key],
-                    if key == "sessions" {
-                        &["sort", "period"]
-                    } else if key == "tokens" {
+                    if key == "sessions" || key == "tokens" {
                         &["period"]
                     } else {
                         &[]

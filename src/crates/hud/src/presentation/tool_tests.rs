@@ -81,7 +81,7 @@ fn a_proposal_that_spells_out_the_default_leaves_no_draft() {
                "sections": ["blocks"], "style": {"spacing": "regular", "separators": true, "width": 540},
                "blocks": {"claude": {"widget": "bar", "measures": ["quota", "burn", "tokens", "consumed", "cost"], "span": "full"},
                           "api:deepseek": {"widget": "number", "period": "day"}},
-               "sessions": {"limit": 5, "period": "day", "sort": "active"}, "tokens": {"period": "day"}}),
+               "sessions": {"limit": 5, "period": "day"}, "tokens": {"period": "day"}}),
     );
     assert_eq!(drafts(&owner)["layouts"], json!([]));
     assert_eq!(
@@ -89,6 +89,22 @@ fn a_proposal_that_spells_out_the_default_leaves_no_draft() {
         "This is the layout already saved, so there is no draft."
     );
     assert_eq!(owner.view()["revision"], revision, "a no-op is no change");
+}
+
+#[test]
+fn sessions_take_no_state_filter_or_sort_and_a_saved_one_reads_without_them() {
+    let (_folder, owner) = owner();
+    let error = refused(
+        &owner,
+        json!({"screen": "all", "sessions": {"states": ["running"], "sort": "active"}}),
+    );
+    assert!(error.contains("sessions.states"), "{error}");
+    assert!(error.contains("sessions.sort"), "{error}");
+    owner
+        .set_layout(json!({"screen": "all", "layout": {"sessions": {"limit": 8, "states": ["waiting", "running"], "sort": "date"}}}))
+        .unwrap();
+    let read = call(&owner, "get_hud", json!({"screen": "all"})).unwrap();
+    assert_eq!(read["layout"]["sessions"], json!({"limit": 8}));
 }
 
 #[test]

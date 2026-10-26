@@ -2,7 +2,7 @@ import type { PanelLayout } from "@agent-hud/protocol";
 
 /** Whether the panel's empty Sessions section says that no session matches
  * rather than that there are none yet (Open's PanelSessionRows.noneMatch):
- * only the layout's own filters, its agents, projects and states, leave
+ * only the layout's own filters, its agents and projects, leave
  * sessions out, and only when the panel has sessions to leave out. An agent's
  * own panel lists that agent's sessions; that is what it shows, not a filter.
  * - `shown`: the rows the section lists.
@@ -15,9 +15,7 @@ export function noSessionsMatch(
   own: number,
 ): boolean {
   const filtered = Boolean(
-    (!focused && layout.agents?.length) ||
-    layout.projects?.length ||
-    layout.states?.length,
+    (!focused && layout.agents?.length) || layout.projects?.length,
   );
   return filtered && shown === 0 && own > 0;
 }

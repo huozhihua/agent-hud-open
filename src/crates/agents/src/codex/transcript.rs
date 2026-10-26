@@ -346,6 +346,18 @@ impl LiveLog {
             }
             "token_count" => {}
             "user_message" | "agent_message" | "item_completed" => {
+                let said = match event {
+                    "item_completed" => matches!(
+                        payload["item"]["type"].as_str(),
+                        Some("UserMessage" | "AgentMessage")
+                    ),
+                    _ => payload["message"]
+                        .as_str()
+                        .is_some_and(|words| !words.trim().is_empty()),
+                };
+                if said {
+                    newer(&mut self.last_message_at, at);
+                }
                 // Every message the agent writes, its progress commentary too,
                 // is the running turn's message (agent-hud-native-open
                 // CodexTranscript); a final answer is also kept for its

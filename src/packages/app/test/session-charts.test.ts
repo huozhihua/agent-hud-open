@@ -3,9 +3,8 @@ import assert from "node:assert/strict";
 import {
   contextRuns,
   largestPositions,
-  liveStatusOn,
+  lastMessageTime,
   niceScale,
-  sessionStateWord,
   sessionWhere,
   stackTurn,
   stackTurnBars,
@@ -169,35 +168,23 @@ test("a row names its model, its project with ~ else its folder, and its client"
   );
 });
 
-test("a session's state reads as Open's words, and as none while its client's live status is off", () => {
-  assert.equal(sessionStateWord("waiting", true, false), "Needs approval");
-  assert.equal(sessionStateWord("running", true, false), "Running");
+test("a session dates from its last message, else its last event", () => {
   assert.equal(
-    sessionStateWord("idle", true, false),
-    "Waiting for you",
-    "ended with live status on",
+    lastMessageTime({
+      lastMessageAt: "2026-10-26T08:00:00Z",
+      updatedAt: "2026-10-26T09:30:00Z",
+    }),
+    "2026-10-26T08:00:00Z",
+    "a later event, such as a tool call, does not move it",
   );
   assert.equal(
-    sessionStateWord("unverified", true, false),
-    "Status out of date",
+    lastMessageTime({ lastMessageAt: null, updatedAt: "2026-10-26T09:30:00Z" }),
+    "2026-10-26T09:30:00Z",
+    "no message time: the last event",
   );
-  assert.equal(sessionStateWord("waiting", true, true), "等待批准");
-  assert.equal(sessionStateWord("running", true, true), "运行中");
-  assert.equal(sessionStateWord("idle", true, true), "等你回复");
-  assert.equal(sessionStateWord("unverified", true, true), "状态待更新");
-  for (const state of ["waiting", "running", "idle", "unverified"] as const) {
-    assert.equal(
-      sessionStateWord(state, false, true),
-      null,
-      `${state} without live status`,
-    );
-  }
-  assert.equal(liveStatusOn({ codex: { live: false } }, "codex"), false);
-  assert.equal(liveStatusOn({ codex: { live: true } }, "codex"), true);
   assert.equal(
-    liveStatusOn({ codex: {} }, "codex"),
-    true,
-    "on unless turned off",
+    lastMessageTime({ updatedAt: "2026-10-26T09:30:00Z" }),
+    "2026-10-26T09:30:00Z",
+    "an older Core without the field",
   );
-  assert.equal(liveStatusOn(undefined, "claude"), true);
 });

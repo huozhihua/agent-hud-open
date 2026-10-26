@@ -188,6 +188,13 @@ impl LogHead {
         self.live.activity_at(self.updated_at, child)
     }
 
+    /// When the log's last message was written (`LiveLog::last_message_at`),
+    /// else its last event, for a client that records no messages or a log
+    /// read before the time was kept: what lists order sessions by.
+    pub fn last_message_at(&self) -> Option<i64> {
+        self.live.last_message_at.or_else(|| self.activity_at(None))
+    }
+
     /// Records the log's list cost (`metering::list_cost`).
     pub(crate) fn set_list_cost(&mut self, cost: Option<metering::ListCost>) {
         self.list_cost = cost.and_then(|cost| cost.complete());
@@ -238,6 +245,11 @@ impl LogHead {
             .unwrap_or_else(|| self.updated.clone());
         let mut session = json!({"id":self.id,"title":self.title,"source":self.source,"model":self.model,"vendorName":crate::naming::model_names::vendor_name(&self.source),"modelName":(!self.model.is_empty()).then(||crate::naming::model_names::consumer_name(&format!("{}-model:{}",self.source,self.model))),"cwd":self.cwd,"updatedAt":updated,"state":self.live.session_state(now,&self.source,subagents_at),"tokens":self.usage.total(),"cost":self.list_cost_usd(),"contextPercent":null,"logPath":self.origin_path.as_ref().unwrap_or(&self.path),"parentId":self.live.parent_id});
         session["project"] = json!(crate::projects::project_id(self.cwd.as_deref()));
+        session["lastMessageAt"] = json!(self
+            .last_message_at()
+            .and_then(DateTime::<Utc>::from_timestamp_millis)
+            .map(|at| at.to_rfc3339())
+            .unwrap_or_else(|| self.updated.clone()));
         // `tokens` by kind, from the same log: the Sessions page's Today card
         // splits its total by them (agent-hud-native-open `SessionsTodayCard`).
         // These are the log's own; `AgentHudCore::session_totals` adds its

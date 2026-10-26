@@ -494,7 +494,7 @@ impl HookEvidence {
                 let label =
                     session_title::display(&event.source, &event.session_id, &naming, cwd, None);
                 let at = iso(event.at_ms);
-                let mut session = json!({"id":event.session_id,"source":event.source,"title":label,"model":event.data["model"].as_str().unwrap_or("Unknown"),"cwd":cwd,"updatedAt":at,"state":"idle","tokens":0,"cost":null,"contextPercent":null,"logPath":null,"parentId":null,"usageStatus":"unavailable","evidence":"completion-hook","liveFacts":{"turnId":event.data["turnId"],"turnStartedAt":null,"outcome":"completed","endedAt":at,"limitedUntil":null,"observedAt":at,"lastEventAt":at,"activity":null,"requests":[]}});
+                let mut session = json!({"id":event.session_id,"source":event.source,"title":label,"model":event.data["model"].as_str().unwrap_or("Unknown"),"cwd":cwd,"updatedAt":at,"lastMessageAt":at,"state":"idle","tokens":0,"cost":null,"contextPercent":null,"logPath":null,"parentId":null,"usageStatus":"unavailable","evidence":"completion-hook","liveFacts":{"turnId":event.data["turnId"],"turnStartedAt":null,"outcome":"completed","endedAt":at,"limitedUntil":null,"observedAt":at,"lastEventAt":at,"activity":null,"requests":[]}});
                 self.overlay(&mut session, now, Some(event.at_ms), None);
                 result.push(session);
             }

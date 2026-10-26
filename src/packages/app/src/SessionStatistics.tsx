@@ -11,7 +11,7 @@ import { Button } from "@agent-hud/ui/components/button";
 import { Tabs, TabsList, TabsTrigger } from "@agent-hud/ui/components/tabs";
 import { SelectItem } from "@agent-hud/ui/components/select";
 import { Input } from "@agent-hud/ui/components/input";
-import { liveStatusOn, sessionClient } from "./lib/sessions";
+import { lastMessageTime, sessionClient } from "./lib/sessions";
 import { useSessionDetail, useSessions } from "./lib/use-sessions";
 import type {
   NativeMethod,
@@ -32,7 +32,6 @@ import {
   compact,
   dayStart,
   earlier,
-  inFlight,
   moneyText,
   numeric,
   plain,
@@ -85,31 +84,19 @@ export default function SessionStatistics({
   const t = (en: string, cn: string) => (zh ? cn : en);
   const now = Date.parse(snapshot.generatedAt),
     today = dayStart(now);
-  // Clients whose live status is off: Core reports their sessions without a
-  // state, as the HUD's snapshot does, and they name none (Open's
-  // SessionList.state).
-  const preferences = snapshot.sourcePreferences;
-  const live = (source: string) =>
-    liveStatusOn(preferences, source.toLowerCase());
-  const idleSources = Object.entries(preferences ?? {})
-    .filter(([, preference]) => preference.live === false)
-    .map(([key]) => key)
-    .sort()
-    .join(",");
   const listQuery = useMemo<Omit<SessionsQuery, "offset" | "limit">>(
     () => ({
       scope: arrangement === "active" ? "active" : "recent",
       rootsOnly: true,
       // Rows draw their turns and context, as the phone's do.
       turnBars: true,
-      ...(idleSources ? { idleSources: idleSources.split(",") } : {}),
       ...(source === ALL ? {} : { source }),
       ...(project === ALL
         ? {}
         : { project: project === "__unassigned__" ? null : project }),
       ...(query.trim() ? { search: query.trim() } : {}),
     }),
-    [arrangement, source, project, query, idleSources],
+    [arrangement, source, project, query],
   );
   const revision =
     snapshot.sessionsRevision ?? (snapshot.mode === "demo" ? now : 0);
@@ -158,9 +145,10 @@ export default function SessionStatistics({
   const groups = new Map<number, Session[]>();
   const firstNamed = new Date(today);
   firstNamed.setDate(firstNamed.getDate() - 6);
+  // A session files under the day of its last message, whatever it is doing.
   for (const session of filtered) {
-    const observedAt = Date.parse(session.updatedAt);
-    const day = inFlight(session) ? today : dayStart(Math.min(observedAt, now));
+    const observedAt = Date.parse(lastMessageTime(session));
+    const day = dayStart(Math.min(observedAt, now));
     const key =
       day < firstNamed.getTime() || !Number.isFinite(day) ? earlier : day;
     const group = groups.get(key);
@@ -171,7 +159,6 @@ export default function SessionStatistics({
     .map(([day, sessions]) => ({ day, sessions }))
     .sort((a, b) => b.day - a.day);
   const todaySessions = groups.get(today) ?? [];
-  const running = filtered.filter(inFlight).length;
   const choose = (id: string) => {
     setSelectedId(id);
     setSelectedEntry(null);
@@ -199,7 +186,6 @@ export default function SessionStatistics({
           key={session.id}
           session={session}
           client={sessionClient(session, snapshot.providers)}
-          live={live(session.source)}
           first={index === 0}
           now={now}
           theme={theme}
@@ -248,7 +234,6 @@ export default function SessionStatistics({
           {selected ? (
             <InlineDetail
               session={selected}
-              live={live(selected.source)}
               detail={detail}
               loading={loading}
               error={error}
@@ -353,21 +338,9 @@ export default function SessionStatistics({
                   ...numeric,
                 }}
               >
-                <span
-                  aria-hidden="true"
-                  style={{
-                    display: "inline-block",
-                    width: 6,
-                    height: 6,
-                    borderRadius: "50%",
-                    background: running > 0 ? "#4ade80" : theme.tertiary,
-                    marginRight: 6,
-                    transition: "background-color 200ms ease",
-                  }}
-                />
                 {zh
-                  ? `${arrangement === "active" ? "24 小时" : "7 天"}内 ${list.page?.total ?? 0} 个 · ${partial ? `已加载 ${running} 个运行中` : `${running} 个运行中`}`
-                  : `${list.page?.total ?? 0} in ${arrangement === "active" ? "24 hours" : "7 days"} · ${running} ${partial ? "loaded running" : "running"}`}
+                  ? `${arrangement === "active" ? "24 小时" : "7 天"}内 ${list.page?.total ?? 0} 个`
+                  : `${list.page?.total ?? 0} in ${arrangement === "active" ? "24 hours" : "7 days"}`}
               </span>
               <SourceSelect
                 label={t("Session source", "会话来源")}
@@ -504,7 +477,6 @@ export default function SessionStatistics({
                   <DayHeader
                     title={t("Last 24 hours", "最近 24 小时")}
                     count={filtered.length}
-                    running={running}
                     open
                     folded=""
                     theme={theme}
@@ -514,10 +486,7 @@ export default function SessionStatistics({
                 </>
               )
             : grouped.map((group) => {
-                const activeCount = group.sessions.filter(inFlight).length;
-                const open =
-                  (group.day === today || activeCount > 0) !==
-                  flipped.has(group.day);
+                const open = (group.day === today) !== flipped.has(group.day);
                 const groupTokens = group.sessions.reduce(
                   (sum, session) => sum + session.tokens,
                   0,
@@ -528,7 +497,6 @@ export default function SessionStatistics({
                     <DayHeader
                       title={titleForDay(group.day, today, zh)}
                       count={group.sessions.length}
-                      running={activeCount}
                       open={open}
                       folded={[
                         groupMoney.value !== null

@@ -16,9 +16,6 @@ import {
   clipped,
   ColorKey,
   compact,
-  Dot,
-  dotColor,
-  inFlight,
   integer,
   kindColor,
   kindNames,
@@ -68,7 +65,7 @@ export function TodayCard({
       label: session.title || (zh ? "未命名会话" : "Untitled session"),
       value: session.tokens,
       note: share(session.tokens, total),
-      color: inFlight(session) ? dotColor(session, theme) : theme.tertiary,
+      color: theme.tertiary,
       title: session.title,
     })),
     ...(ranked.rest.count > 0
@@ -343,9 +340,9 @@ function ContextFigure({ session, theme }: { session: Session; theme: Theme }) {
 }
 
 /**
- * One session as the phone lists it, in three columns: its state, title,
- * model · project · client and its status line; its newest turns as a
- * sparkline; its tokens, cost and context. A click opens its page.
+ * One session as the phone lists it, in three columns: its title, model ·
+ * project · client and its status line; its newest turns as a sparkline; its
+ * tokens, cost and context. A click opens its page.
  */
 export function SessionRow({
   session,
@@ -354,13 +351,10 @@ export function SessionRow({
   now,
   onSelect,
   first,
-  live,
 }: {
   session: Session;
   /** The client that drives the session ("Codex Desktop"). */
   client: string;
-  /** Whether the client's live status is on; off, the row names no state. */
-  live: boolean;
   theme: Theme;
   now: number;
   onSelect: () => void;
@@ -404,26 +398,20 @@ export function SessionRow({
       }}
     >
       <span style={{ display: "grid", gap: 4, minWidth: 0 }}>
-        <span style={{ ...row }}>
-          <Dot session={session} theme={theme} />
-          <strong style={{ ...clipped, fontSize: 13, fontWeight: 600 }}>
-            {session.title || (zh ? "未命名会话" : "Untitled session")}
-          </strong>
-        </span>
-        <span style={{ ...line, ...clipped, paddingLeft: 15 }}>
+        <strong style={{ ...clipped, fontSize: 13, fontWeight: 600 }}>
+          {session.title || (zh ? "未命名会话" : "Untitled session")}
+        </strong>
+        <span style={{ ...line, ...clipped }}>
           {sessionWhere(session, client).join(" · ")}
         </span>
-        <span style={{ ...line, ...clipped, paddingLeft: 15 }}>
-          {statusLine(session, now, live, zh)}
+        <span style={{ ...line, ...clipped }}>
+          {statusLine(session, now, zh)}
         </span>
       </span>
       <span style={{ minWidth: 0 }}>
         {bars && bars.length > 0 ? (
           <TurnSparkline
             bars={bars}
-            running={
-              session.state === "running" && session.turnBars?.by === "prompt"
-            }
             theme={theme}
             label={
               zh
@@ -485,7 +473,6 @@ export function SessionRow({
 export function DayHeader({
   title,
   count,
-  running,
   open,
   folded,
   theme,
@@ -494,7 +481,6 @@ export function DayHeader({
 }: {
   title: string;
   count: number;
-  running: number;
   open: boolean;
   /** What the day spent, shown while it is folded. */
   folded: string;
@@ -534,11 +520,6 @@ export function DayHeader({
           {title}
         </strong>
         <span style={{ fontSize: 11, ...numeric }}>{count}</span>
-        {running > 0 && (
-          <span style={{ color: theme.accent, fontSize: 11 }}>
-            {zh ? `${running} 个运行中` : `${running} running`}
-          </span>
-        )}
       </span>
       <span
         style={{

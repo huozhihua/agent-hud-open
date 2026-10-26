@@ -117,18 +117,17 @@ function stackedRects(
 /**
  * A row's recent turns (the phone's `TurnSparkline`): each turn's new tokens
  * stacked by kind, the sub-agents' part faded, a compaction as an amber line
- * before its turn, the running turn outlined, and the largest turn labelled
- * with its value so the bars have a scale.
+ * before its turn, and the largest turn labelled with its value so the bars
+ * have a scale. No turn is marked as running: lists show no session state
+ * (owner, 2026-10-26).
  */
 export function TurnSparkline({
   bars,
-  running,
   theme,
   height = 34,
   label,
 }: {
   bars: StackedBar[];
-  running: boolean;
   theme: Theme;
   height?: number;
   label: string;
@@ -194,25 +193,6 @@ export function TurnSparkline({
             height={0.5}
             fill={theme.divider}
           />
-          {running && bars.length > 0 && (
-            <rect
-              x={(bars.length - 1) * slot + (slot - barWidth) / 2 - 1.5}
-              width={barWidth + 3}
-              rx={1.5}
-              fill="none"
-              stroke={theme.text}
-              strokeOpacity={0.85}
-              strokeWidth={1}
-              style={{
-                y: Math.min(tops[bars.length - 1] ?? height, height - 3) - 1.5,
-                height:
-                  height -
-                  Math.min(tops[bars.length - 1] ?? height, height - 3) +
-                  0.5,
-                transition: grow,
-              }}
-            />
-          )}
           {largest !== undefined && (
             <Halo
               theme={theme}
@@ -259,13 +239,13 @@ export function turnBar(entry: Entry): StackedBar {
  * price; on a round scale. The three largest turns carry their value on the
  * chart, a layers mark sits above a turn sub-agents helped and an amber
  * arrow above one whose cache had expired, a compaction is an amber dashed
- * line before its turn, and the running turn is outlined and named "now".
+ * line before its turn. No turn is marked as running: the page shows no
+ * session state (owner, 2026-10-26).
  * Pointing shows `hover`; a click picks the turn.
  */
 export function TurnBarsChart({
   entries,
   measure,
-  running,
   selected,
   onSelect,
   hover,
@@ -274,7 +254,6 @@ export function TurnBarsChart({
 }: {
   entries: Entry[];
   measure: Measure;
-  running: boolean;
   selected: string | null;
   onSelect: (entry: Entry) => void;
   hover: (entry: Entry) => ReactNode;
@@ -498,44 +477,21 @@ export function TurnBarsChart({
             ) : null,
           )}
           {bars}
-          {running && entries.length > 0 && (
-            <rect
-              x={(entries.length - 1) * slot + (slot - barWidth) / 2 - 1.5}
-              width={barWidth + 3}
-              rx={1.5}
-              fill="none"
-              stroke={theme.text}
-              strokeOpacity={0.9}
-              strokeWidth={1}
-              style={{
-                y: Math.min(tops[entries.length - 1], height - 2) - 1.5,
-                height:
-                  height - Math.min(tops[entries.length - 1], height - 2) + 1.5,
-                transition: grow,
-              }}
-            />
-          )}
           {marks}
           {valueLabels}
           {ticks.map((index) => {
-            const now = running && index === entries.length - 1;
             const center = index * slot + slot / 2;
             return (
               <text
                 key={`x${index}`}
                 {...labelFont}
-                x={Math.min(
-                  Math.max(center, now ? 26 : 10),
-                  plot - (now ? 26 : 10),
-                )}
+                x={Math.min(Math.max(center, 10), plot - 10)}
                 y={total - 4}
                 textAnchor="middle"
-                fill={now ? theme.accent : theme.secondary}
-                fontWeight={now ? 600 : 400}
+                fill={theme.secondary}
                 style={numeric}
               >
                 {`T${entries[index].index}`}
-                {now ? (zh ? " · 进行中" : " · now") : ""}
               </text>
             );
           })}

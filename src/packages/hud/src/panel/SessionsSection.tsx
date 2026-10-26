@@ -41,32 +41,23 @@ export function SourceSessions({
     : layout.agents?.length
       ? layout.agents.map((source) => sourceID(snapshot, source))
       : undefined;
-  const idleSources = Object.entries(services?.sources ?? {})
-    .filter(([, prefs]) => prefs.live === false)
-    .map(([source]) => source);
+  const week = layout.period === "week";
   const query = usePanelQuery<SessionsResponse>(
     "sessions",
     {
-      scope: layout.period === "week" ? "recent" : "active",
+      scope: week ? "recent" : "active",
       limit,
-      sort: layout.sort ?? "active",
       ...(selectedSources ? { sources: selectedSources } : {}),
       ...(layout.projects?.length ? { projects: layout.projects } : {}),
-      ...(layout.states?.length ? { states: layout.states } : {}),
-      ...(idleSources.length ? { idleSources } : {}),
     },
     snapshot.sessionsRevision,
     active,
   );
   const colors = palette(useGround(light));
   // Snapshot rows provide a first paint only; the complete-index query owns
-  // ordering and totals, including running sessions beyond the first page.
+  // ordering and totals. Both list the newest last message first and look
+  // at no session state (owner, 2026-10-26).
   const fallback = snapshot.sessions
-    .map((session) =>
-      idleSources.includes(sourceID(snapshot, session.source))
-        ? { ...session, state: "idle" as const }
-        : session,
-    )
     .filter(
       (session) =>
         (!selectedSources ||
@@ -74,26 +65,17 @@ export function SourceSessions({
         (!layout.projects?.length ||
           layout.projects.includes(
             session.project ?? session.cwd ?? "unassigned",
-          )) &&
-        (!layout.states?.length || layout.states.includes(session.state)),
+          )),
     )
-    .sort((a, b) => {
-      const rank = (state: string) =>
-        state === "waiting" ? 0 : state === "running" ? 1 : 2;
-      return (
-        (layout.sort === "date" ? 0 : rank(a.state) - rank(b.state)) ||
-        Date.parse(b.updatedAt) - Date.parse(a.updatedAt)
-      );
-    });
+    .sort(
+      (a, b) =>
+        Date.parse(b.lastMessageAt ?? b.updatedAt) -
+        Date.parse(a.lastMessageAt ?? a.updatedAt),
+    );
   const sessions = query.data?.items ?? fallback.slice(0, limit);
   const total = query.data?.total ?? fallback.length;
-  const activeCount =
-    query.data?.activeCount ??
-    fallback.filter(
-      (session) => session.state === "running" || session.state === "waiting",
-    ).length;
   // A filter of the layout that keeps none of the sessions there are says
-  // so, and the header then claims no state of sessions it leaves out.
+  // so, and the header then names no window it leaves them out of.
   const own = focusVendor
     ? snapshot.sessions.filter((session) =>
         selectedSources!.includes(sourceID(snapshot, session.source)),
@@ -105,17 +87,13 @@ export function SourceSessions({
     sessions.length,
     own,
   );
-  const status = activeCount
+  const status = week
     ? zh
-      ? `${activeCount} 个运行中`
-      : `${activeCount} running`
-    : sessions.some((session) => session.state === "unverified")
-      ? zh
-        ? "状态未知"
-        : "Status unavailable"
-      : zh
-        ? "最近结束"
-        : "Recently ended";
+      ? "近 7 天"
+      : "Last 7 days"
+    : zh
+      ? "近 24 小时"
+      : "Last 24 hours";
   return (
     <section
       className="hud-source-sessions"
@@ -185,43 +163,13 @@ export function SourceSessions({
         >
           <span
             style={{
-              position: "relative",
+              display: "block",
               width: 14,
               height: 14,
               flex: "0 0 14px",
-              opacity: session.state === "idle" ? 0.7 : 1,
             }}
           >
-            {/* The ring round the dot is cut out of the mark, so the ground shows in it. */}
-            <span
-              style={{
-                display: "block",
-                width: 14,
-                height: 14,
-                WebkitMaskImage:
-                  "radial-gradient(circle at 13px 13px, transparent 4.5px, #000 5px)",
-                maskImage:
-                  "radial-gradient(circle at 13px 13px, transparent 4.5px, #000 5px)",
-              }}
-            >
-              <Logo source={session.source} size={14} light={light} />
-            </span>
-            <i
-              style={{
-                position: "absolute",
-                right: -2,
-                bottom: -2,
-                width: 6,
-                height: 6,
-                borderRadius: "50%",
-                background:
-                  session.state === "waiting"
-                    ? colors.warning
-                    : session.state === "running"
-                      ? "#c084fc"
-                      : colors.tertiary,
-              }}
-            />
+            <Logo source={session.source} size={14} light={light} />
           </span>
           <span
             style={{

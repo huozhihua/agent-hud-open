@@ -13,10 +13,9 @@ import {
   numberFormat,
   tokensShort,
   snapshotLanguage,
-  waited,
 } from "@agent-hud/ui/format";
 import {
-  sessionStateWord,
+  lastMessageTime,
   type ListMoney,
   type TokenKindName,
 } from "../lib/sessions";
@@ -48,9 +47,9 @@ export interface Theme {
   cache: string;
   cacheWrite: string;
   reasoning: string;
-  /** A running session: its dot, its count, its turn's outline. */
+  /** The cost bars and their key. */
   accent: string;
-  /** Needs approval; a context near its limit; a cache sent again. */
+  /** A context near its limit; a cache sent again. */
   warning: string;
   /** Where the client compacted the conversation. */
   compaction: string;
@@ -204,15 +203,6 @@ export function dayStart(at: number) {
   return date.getTime();
 }
 
-export function inFlight(session: Session) {
-  return session.state === "running" || session.state === "waiting";
-}
-
-/** The session's state word (Open's `SessionList.state`); none while its client's live status is off. */
-export function stateLabel(session: Session, live: boolean, zh = false) {
-  return sessionStateWord(session.state, live, zh);
-}
-
 export function updatedLabel(session: Session, now: number, zh = false) {
   const time = Date.parse(session.updatedAt);
   if (!Number.isFinite(time)) return "—";
@@ -231,46 +221,21 @@ export function updatedLabel(session: Session, now: number, zh = false) {
     : `Updated ${Math.floor(seconds / 86400)}d ago`;
 }
 
-export function dotColor(session: Session, theme: Theme) {
-  return session.state === "waiting"
-    ? theme.warning
-    : session.state === "running"
-      ? theme.accent
-      : theme.tertiary;
-}
-
-/**
- * How long the work in flight has run ("3m"), else how long ago the session
- * was last active ("2h ago"), as the phone's rows say it.
- */
+/** How long ago the session's last message was written ("2h ago"). */
 export function sinceLabel(session: Session, now: number, zh = false) {
-  const updated = Date.parse(session.updatedAt);
-  if (inFlight(session)) {
-    const started = Date.parse(session.liveFacts?.turnStartedAt ?? "");
-    const from = Number.isFinite(started) ? started : updated;
-    return Number.isFinite(from) ? waited((now - from) / 1000) : "—";
-  }
-  return Number.isFinite(updated)
-    ? age((now - updated) / 1000, zh ? "zh" : "en")
-    : "—";
+  const at = Date.parse(lastMessageTime(session));
+  return Number.isFinite(at) ? age((now - at) / 1000, zh ? "zh" : "en") : "—";
 }
 
-/** A row's status line (Open's `SessionCard.status`): the state word, the turns, the time. */
-export function statusLine(
-  session: Session,
-  now: number,
-  live: boolean,
-  zh = false,
-): string {
+/** A row's status line (Open's `SessionCard.status`): the turns, the time. */
+export function statusLine(session: Session, now: number, zh = false): string {
   const turns =
     session.turnCount != null && session.turnCount > 0
       ? zh
         ? `${session.turnCount} 轮`
         : `${session.turnCount} ${session.turnCount === 1 ? "turn" : "turns"}`
       : null;
-  return [stateLabel(session, live, zh), turns, sinceLabel(session, now, zh)]
-    .filter(Boolean)
-    .join(" · ");
+  return [turns, sinceLabel(session, now, zh)].filter(Boolean).join(" · ");
 }
 
 export function titleForDay(day: number, today: number, zh = false) {
@@ -329,34 +294,6 @@ export function projectName(path: string | null, zh = false) {
     : zh
       ? "未归属项目"
       : "Unassigned";
-}
-
-export function Dot({
-  session,
-  theme,
-  size = 7,
-}: {
-  session: Session;
-  theme: Theme;
-  size?: number;
-}) {
-  return (
-    <span
-      aria-hidden="true"
-      style={{
-        width: size,
-        height: size,
-        borderRadius: "50%",
-        flexShrink: 0,
-        background: dotColor(session, theme),
-        boxShadow:
-          session.state === "running"
-            ? `0 0 0 3px ${theme.light ? "rgba(31,157,85,.18)" : "rgba(74,222,128,.18)"}`
-            : "none",
-        transition: "background-color 200ms ease, box-shadow 200ms ease",
-      }}
-    />
-  );
 }
 
 export function Missing({

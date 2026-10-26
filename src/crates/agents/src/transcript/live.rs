@@ -205,6 +205,10 @@ pub struct LiveLog {
     pub is_internal: bool,
     pub started_at: Option<i64>,
     pub last_event: Option<i64>,
+    /// When the person's last prompt or the agent's last words were written;
+    /// lists order sessions by it. Tool calls, results and hooks leave it.
+    #[serde(default)]
+    pub last_message_at: Option<i64>,
     pub turns: VecDeque<Turn>,
     pub activity: Option<Activity>,
     pub inherited_through: Option<u64>,
@@ -680,5 +684,34 @@ mod next_change_tests {
                 state
             ),
         }
+    }
+
+    #[test]
+    fn a_claude_session_s_last_message_is_its_last_prompt_or_words() {
+        let now = Utc::now().timestamp_millis();
+        let mut log = Log::new("/tmp/last-message-claude.jsonl".into(), "claude");
+        log.parse(&json!({"type":"user","sessionId":"s","timestamp":iso(now - 100_000),"uuid":"u1","message":{"role":"user","content":"Fix the build"}}));
+        assert_eq!(log.live.last_message_at, Some(now - 100_000));
+        log.parse(&json!({"type":"assistant","sessionId":"s","timestamp":iso(now - 90_000),"message":{"id":"m1","model":"claude-opus-4-5","role":"assistant","content":[{"type":"text","text":"Looking."},{"type":"tool_use","id":"t1","name":"Bash","input":{}}],"usage":{"input_tokens":10,"output_tokens":5,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}}));
+        assert_eq!(log.live.last_message_at, Some(now - 90_000));
+        // A tool call, its result and the stop hook's line are no message.
+        log.parse(&json!({"type":"assistant","sessionId":"s","timestamp":iso(now - 80_000),"message":{"id":"m2","model":"claude-opus-4-5","role":"assistant","content":[{"type":"tool_use","id":"t2","name":"Bash","input":{}}],"usage":{"input_tokens":10,"output_tokens":5,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}}));
+        log.parse(&json!({"type":"user","sessionId":"s","timestamp":iso(now - 70_000),"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t2","content":"ok"}]}}));
+        log.parse(&json!({"type":"system","subtype":"stop_hook_summary","sessionId":"s","timestamp":iso(now - 60_000)}));
+        assert_eq!(log.live.last_message_at, Some(now - 90_000));
+        assert_eq!(log.live.last_event(), Some(now - 60_000));
+    }
+
+    #[test]
+    fn a_codex_session_s_last_message_is_its_last_prompt_or_words() {
+        let now = Utc::now().timestamp_millis();
+        let mut log = Log::new("/tmp/last-message-codex.jsonl".into(), "codex");
+        log.parse(&json!({"type":"event_msg","timestamp":iso(now - 100_000),"payload":{"type":"task_started","turn_id":"t1"}}));
+        log.parse(&json!({"type":"event_msg","timestamp":iso(now - 99_000),"payload":{"type":"user_message","message":"Fix the build"}}));
+        assert_eq!(log.live.last_message_at, Some(now - 99_000));
+        log.parse(&json!({"type":"event_msg","timestamp":iso(now - 90_000),"payload":{"type":"agent_message","message":"Looking."}}));
+        log.parse(&json!({"type":"response_item","timestamp":iso(now - 80_000),"payload":{"type":"function_call","name":"shell","call_id":"c1"}}));
+        log.parse(&json!({"type":"event_msg","timestamp":iso(now - 70_000),"payload":{"type":"task_complete","turn_id":"t1"}}));
+        assert_eq!(log.live.last_message_at, Some(now - 90_000));
     }
 }

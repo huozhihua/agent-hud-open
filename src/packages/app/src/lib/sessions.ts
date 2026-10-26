@@ -53,35 +53,16 @@ export function sessionWhere(
 }
 
 /**
- * A session's state as its row and page word it (Open's `SessionList.state`):
- * blocked on the user, running, ended (waiting for the user's next prompt) or
- * a reading too old to vouch for; no word at all when the client's live
- * status is off, since then nothing says what the session is doing.
+ * When a session's last message was written (the person's prompt or the
+ * agent's text reply), else its last event. Lists order, group and date
+ * sessions by it, never by their state, which can read wrong (owner,
+ * 2026-10-26).
  */
-export function sessionStateWord(
-  state: "running" | "waiting" | "idle" | "unverified",
-  live: boolean,
-  zh: boolean,
-): string | null {
-  if (!live) return null;
-  switch (state) {
-    case "waiting":
-      return zh ? "等待批准" : "Needs approval";
-    case "running":
-      return zh ? "运行中" : "Running";
-    case "unverified":
-      return zh ? "状态待更新" : "Status out of date";
-    case "idle":
-      return zh ? "等你回复" : "Waiting for you";
-  }
-}
-
-/** Whether a client's live status is on: on unless its preference turns it off. */
-export function liveStatusOn(
-  preferences: Record<string, { live?: boolean }> | null | undefined,
-  source: string,
-): boolean {
-  return preferences?.[source]?.live !== false;
+export function lastMessageTime(session: {
+  lastMessageAt?: string | null;
+  updatedAt: string;
+}): string {
+  return session.lastMessageAt || session.updatedAt;
 }
 
 /** A session row's tooltip: its title, its client and its folder. */

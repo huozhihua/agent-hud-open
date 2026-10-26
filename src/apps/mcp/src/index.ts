@@ -248,12 +248,8 @@ const proposal = z
       .object({
         limit: z.number().int().min(1).max(10).optional(),
         period: z.enum(["day", "week"]).optional(),
-        sort: z.enum(["active", "date"]).optional(),
         agents: keys.optional(),
         projects: keys.optional(),
-        states: z
-          .array(z.enum(["running", "waiting", "idle", "unverified", "ended"]))
-          .optional(),
       })
       .strict()
       .optional(),

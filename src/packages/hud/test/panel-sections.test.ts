@@ -20,12 +20,12 @@ test("an agent's own panel without sessions has none yet; only the layout's filt
     "its sessions are all in other projects",
   );
   assert.equal(
-    noSessionsMatch({ states: ["running"] }, true, 0, 0),
+    noSessionsMatch({ projects: ["agent-hud"] }, true, 0, 0),
     false,
     "no session to leave out",
   );
   assert.equal(
-    noSessionsMatch({ states: ["running"] }, false, 1, 4),
+    noSessionsMatch({ projects: ["agent-hud"] }, false, 1, 4),
     false,
     "a row is listed",
   );

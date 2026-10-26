@@ -53,14 +53,6 @@ export function peekItems(
   return items;
 }
 
-export function peekFallback(vendor: HUDVendor, zh: boolean): string {
-  return vendor.working
-    ? zh
-      ? `${vendor.working} 个运行中`
-      : `${vendor.working} running`
-    : vendor.name;
-}
-
 /** The line is as long as what it says; its text is measured, since window names differ in length. */
 export function peekLineWidth(
   vendor: HUDVendor,
@@ -84,7 +76,7 @@ export function peekLineWidth(
         0,
       ) +
       spacing * (items.length - 1)
-    : labelWidth(peekFallback(vendor, zh), font);
+    : labelWidth(vendor.name, font);
   return Math.max(
     100,
     Math.min(640 + tuck, Math.ceil(cells + spacing * 2 + 4 + tuck)),
@@ -143,7 +135,7 @@ export function AgentPeek({
             </span>
           ))
         ) : (
-          <span style={{ opacity: 0.7 }}>{peekFallback(vendor, zh)}</span>
+          <span style={{ opacity: 0.7 }}>{vendor.name}</span>
         )}
       </div>
     );
@@ -225,11 +217,6 @@ export function AgentPeek({
           >
             {vendor.balance}
           </strong>
-        </div>
-      )}
-      {vendor.working > 0 && (
-        <div style={{ opacity: 0.55, height: 18 * scale }}>
-          {zh ? `${vendor.working} 个运行中` : `${vendor.working} running`}
         </div>
       )}
     </div>

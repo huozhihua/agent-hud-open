@@ -280,26 +280,6 @@ impl AgentHudCore {
         }
         let source_filter = strings(&params, "sources")?;
         let project_filter = strings(&params, "projects")?;
-        let state_filter = strings(&params, "states")?;
-        let idle_sources = strings(&params, "idleSources")?.unwrap_or_default();
-        if state_filter.as_ref().is_some_and(|states| {
-            states.iter().any(|state| {
-                !matches!(
-                    state.as_str(),
-                    "running" | "waiting" | "idle" | "unverified" | "ended"
-                )
-            })
-        }) {
-            return Err("states contains an unknown session state".into());
-        }
-        let sort = params
-            .get("sort")
-            .map(|v| v.as_str().ok_or("sort must be a string"))
-            .transpose()?
-            .unwrap_or("date");
-        if !matches!(sort, "date" | "active") {
-            return Err("sort must be date or active".into());
-        }
         let search = params
             .get("search")
             .map(|v| v.as_str().ok_or("search must be a string"))
@@ -329,15 +309,19 @@ impl AgentHudCore {
                             .as_deref()
                             .is_none_or(|id| !ids.contains(&(log.source.as_str(), id)))
                 };
+                // A list's window is time alone: a turn that looks in flight
+                // keeps no session in it (owner, 2026-10-26).
+                let days = if scope == "active" { 1 } else { 7 };
                 related
                     && (scope == "all"
-                        || presentation.recent(
-                            log,
-                            if scope == "active" { 1 } else { 7 },
-                            children
-                                .get(&(log.source.as_str(), log.id.as_str()))
-                                .copied(),
-                        ))
+                        || presentation
+                            .activity_at(
+                                log,
+                                children
+                                    .get(&(log.source.as_str(), log.id.as_str()))
+                                    .copied(),
+                            )
+                            .is_some_and(|at| at >= now - days * 86_400_000))
             })
             .collect::<Vec<_>>();
         let extras = if parent.is_none() && self.hook_events.revision() != 0 {
@@ -464,14 +448,14 @@ impl AgentHudCore {
                     .map(Row::Extra),
             )
             .collect::<Vec<_>>();
-        let at = |row: &Row<'_>| match row {
-            Row::Log(log) => presentation.activity_at(
-                log,
-                children
-                    .get(&(log.source.as_str(), log.id.as_str()))
-                    .copied(),
-            ),
-            Row::Extra(value) => value["updatedAt"].as_str().and_then(metering::date_ms),
+        // Lists order sessions by their last message, never by whether a turn
+        // looks in flight (owner, 2026-10-26).
+        let message_at = |row: &Row<'_>| match row {
+            Row::Log(log) => log.last_message_at(),
+            Row::Extra(value) => value["lastMessageAt"]
+                .as_str()
+                .or(value["updatedAt"].as_str())
+                .and_then(metering::date_ms),
         };
         fn identity<'a>(row: &'a Row<'_>) -> (&'a str, &'a str, &'a str) {
             match row {
@@ -484,65 +468,36 @@ impl AgentHudCore {
             }
         }
         let state = |row: &Row<'_>| -> &'static str {
-            let (source, raw) = match row {
-                Row::Log(log) => (
-                    log.source.as_str(),
-                    presentation.session_state(
-                        log,
-                        children
-                            .get(&(log.source.as_str(), log.id.as_str()))
-                            .copied(),
-                    ),
+            match row {
+                Row::Log(log) => presentation.session_state(
+                    log,
+                    children
+                        .get(&(log.source.as_str(), log.id.as_str()))
+                        .copied(),
                 ),
-                Row::Extra(value) => (
-                    value["source"].as_str().unwrap_or(""),
-                    match value["state"].as_str() {
-                        Some("waiting") => "waiting",
-                        Some("running") => "running",
-                        Some("idle") => "idle",
-                        _ => "unverified",
-                    },
-                ),
-            };
-            if idle_sources.contains(source) {
-                "idle"
-            } else {
-                raw
+                Row::Extra(value) => match value["state"].as_str() {
+                    Some("waiting") => "waiting",
+                    Some("running") => "running",
+                    Some("idle") => "idle",
+                    _ => "unverified",
+                },
             }
         };
-        // Filter and rank the complete persisted heads before paging. Rendering a
-        // small HUD page must not silently cap its scope at the first 200 rows.
+        // Order the complete persisted heads before paging. Rendering a small
+        // HUD page must not silently cap its scope at the first 200 rows.
         let mut rows = rows
             .drain(..)
             .map(|row| {
                 let state = state(&row);
                 (row, state)
             })
-            .filter(|(_, state)| {
-                state_filter.as_ref().is_none_or(|states| {
-                    states.contains(*state) || (*state == "idle" && states.contains("ended"))
-                })
-            })
             .collect::<Vec<_>>();
-        let rank = |state: &str| match state {
-            "waiting" => 0,
-            "running" => 1,
-            _ => 2,
-        };
-        rows.sort_unstable_by(|(a, a_state), (b, b_state)| {
-            (if sort == "active" {
-                rank(a_state).cmp(&rank(b_state))
-            } else {
-                std::cmp::Ordering::Equal
-            })
-            .then_with(|| at(b).cmp(&at(a)))
-            .then_with(|| identity(a).cmp(&identity(b)))
+        rows.sort_unstable_by(|(a, _), (b, _)| {
+            message_at(b)
+                .cmp(&message_at(a))
+                .then_with(|| identity(a).cmp(&identity(b)))
         });
         let total = rows.len();
-        let active_count = rows
-            .iter()
-            .filter(|(_, state)| matches!(*state, "running" | "waiting"))
-            .count();
         let claude_shares = self.claude_window_shares(now);
         let selected = self.selected();
         let family = session_breakdown::Family::new(&selected);
@@ -576,9 +531,6 @@ impl AgentHudCore {
                             }
                         }
                     }
-                    if idle_sources.contains(&log.source) {
-                        value.as_object_mut().unwrap().remove("liveFacts");
-                    }
                     if let Some(title) = self
                         .usage_projection
                         .as_ref()
@@ -595,7 +547,7 @@ impl AgentHudCore {
             .collect::<Vec<_>>();
         let next = offset.saturating_add(items.len());
         Ok(
-            json!({"kind":"sessions","revision":self.sessions_revision,"generatedAt":Utc::now().to_rfc3339(),"items":items,"total":total,"activeCount":active_count,"nextOffset":(next<total).then_some(next),"sources":sources,"projects":projects}),
+            json!({"kind":"sessions","revision":self.sessions_revision,"generatedAt":Utc::now().to_rfc3339(),"items":items,"total":total,"nextOffset":(next<total).then_some(next),"sources":sources,"projects":projects}),
         )
     }
     pub(super) fn session_detail(&mut self, params: Value) -> Result<Value, String> {

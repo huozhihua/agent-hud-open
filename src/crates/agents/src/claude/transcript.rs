@@ -480,6 +480,11 @@ impl LiveLog {
             .then(|| value["error"].as_str())
             .flatten();
         let assistant = role == "assistant" && message["model"] != "<synthetic>";
+        if (prompt && !interrupted)
+            || (assistant && !assistant_words(content, blocks).trim().is_empty())
+        {
+            newer(&mut self.last_message_at, at);
+        }
         let completed = assistant
             && matches!(
                 message["stop_reason"].as_str(),

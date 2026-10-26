@@ -109,6 +109,12 @@ export interface Session {
   project?: string | null;
   startedAt?: string | null;
   updatedAt: string;
+  /** From Core: when the session's last message was written, the person's
+   * prompt or the agent's text reply; the last event where the client
+   * records no messages. Lists order sessions by it. */
+  lastMessageAt?: string | null;
+  /** From Core, for its own work, agents and the phone; no list, filter or
+   * label shows it (owner, 2026-10-26). */
   state: SessionState;
   /** From Core: the session's tokens with its sub-agents' at any depth (decided 2026-10-21, as Open); a sub-agent's own row still counts once in every total. */
   tokens: number;
@@ -459,10 +465,8 @@ export interface PanelLayout {
   sessions?: {
     limit?: number;
     period?: "day" | "week";
-    sort?: "active" | "date";
     agents?: string[];
     projects?: string[];
-    states?: SessionState[];
   };
   tokens?: {
     period?: "day" | "week" | "month";
@@ -791,16 +795,12 @@ export interface SessionsQuery {
   offset?: number;
   /** Defaults to 100; the runtime accepts at most 200. */
   limit?: number;
-  /** Recent is seven days or in flight; active is 24 hours or in flight. */
+  /** Recent is seven days, active 24 hours, of activity; all is every retained session. */
   scope?: "recent" | "active" | "all";
   source?: string;
   /** Complete-index filters; omitted means all, an empty list selects none. */
   sources?: string[];
   projects?: string[];
-  states?: Session["state"][];
-  sort?: "date" | "active";
-  /** Presentation-only live detection suppression, without changing source facts. */
-  idleSources?: string[];
   /** Omitted means all projects; null means sessions without a project. */
   project?: string | null;
   search?: string;
@@ -814,10 +814,9 @@ export interface SessionsResponse {
   kind: "sessions";
   revision: number;
   generatedAt: string;
-  /** One page, ordered by update descending, then source, ID and path. */
+  /** One page, newest last message first, then source, ID and path. */
   items: Session[];
   total: number;
-  activeCount: number;
   nextOffset: number | null;
   /** Scope/root facets before source, project and search filters are applied. */
   sources: string[];

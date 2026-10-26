@@ -202,7 +202,6 @@ export function useHUDLayout({
               : (20 +
                   (1 +
                     focusedVendor.quotas.length +
-                    (focusedVendor.working ? 1 : 0) +
                     (focusedVendor.balance ? 1 : 0)) *
                     18) *
                 scale,

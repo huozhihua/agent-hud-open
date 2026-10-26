@@ -249,7 +249,7 @@ export function HUDMarkStrip({
               key={vendor.key}
               type="button"
               className="hud-agent-mark"
-              aria-label={`${vendor.name}, ${meterLabel(vendor, quotaDisplay)} ${vendor.used == null ? "" : quotaDisplayLabel(quotaDisplay, format.language)}${vendor.working ? `, ${vendor.working} running` : ""}`}
+              aria-label={`${vendor.name}, ${meterLabel(vendor, quotaDisplay)} ${vendor.used == null ? "" : quotaDisplayLabel(quotaDisplay, format.language)}`}
               onPointerEnter={() => {
                 if (hovered !== vendor.key) {
                   setHovered(vendor.key);

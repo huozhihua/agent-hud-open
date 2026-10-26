@@ -312,6 +312,63 @@ fn session_search_matches_the_client_name() {
 }
 
 #[test]
+fn sessions_list_newest_last_message_first_whatever_their_state() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join(".claude/projects/test");
+    fs::create_dir_all(&root).unwrap();
+    let now = Utc::now();
+    let at = |minutes: i64| (now - chrono::Duration::minutes(minutes)).to_rfc3339();
+    let usage = json!({"input_tokens":10,"output_tokens":3});
+    // "quiet" said its last words 20 minutes ago, then ran a tool until a
+    // minute ago: its last event is the newest, its last message is not.
+    let quiet = [
+        json!({"sessionId":"quiet","type":"user","timestamp":at(30),"uuid":"q1","message":{"role":"user","content":"Run the suite"}}),
+        json!({"sessionId":"quiet","type":"assistant","timestamp":at(20),"message":{"id":"qa","model":"claude-opus-4-5","role":"assistant","content":[{"type":"text","text":"Running it."},{"type":"tool_use","id":"t1","name":"Bash","input":{}}],"usage":usage}}),
+        json!({"sessionId":"quiet","type":"user","timestamp":at(1),"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"ok"}]}}),
+    ];
+    // "talked" finished its turn five minutes ago.
+    let talked = [
+        json!({"sessionId":"talked","type":"user","timestamp":at(6),"uuid":"t1","message":{"role":"user","content":"Hi"}}),
+        json!({"sessionId":"talked","type":"assistant","timestamp":at(5),"message":{"id":"ta","model":"claude-opus-4-5","role":"assistant","content":[{"type":"text","text":"Hello."}],"stop_reason":"end_turn","usage":usage}}),
+    ];
+    let lines = |rows: &[Value]| rows.iter().map(|r| format!("{r}\n")).collect::<String>();
+    fs::write(root.join("quiet.jsonl"), lines(&quiet)).unwrap();
+    fs::write(root.join("talked.jsonl"), lines(&talked)).unwrap();
+    let mut backend = fixture(temp.path());
+    backend.request("snapshot", json!({})).unwrap();
+    let page = backend
+        .request(
+            "sessions",
+            json!({"scope":"recent","states":["running"],"sort":"active"}),
+        )
+        .unwrap();
+    let items = page["items"].as_array().unwrap();
+    let ids = items
+        .iter()
+        .map(|row| row["id"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        ids,
+        ["talked", "quiet"],
+        "a state filter or sort is no longer read"
+    );
+    assert_eq!(
+        items[1]["state"], "running",
+        "the state is still worked out"
+    );
+    assert!(page.get("activeCount").is_none());
+    let message_at = |row: &Value| {
+        chrono::DateTime::parse_from_rfc3339(row["lastMessageAt"].as_str().unwrap())
+            .unwrap()
+            .timestamp()
+    };
+    assert_eq!(
+        message_at(&items[1]),
+        (now - chrono::Duration::minutes(20)).timestamp()
+    );
+}
+
+#[test]
 fn unified_subagent_model_tracks_parent_and_child_across_agents() {
     let mut child = Log::new(
         "/tmp/.codebuddy/projects/p1/parent-uuid/subagents/agent-a1.jsonl".into(),
