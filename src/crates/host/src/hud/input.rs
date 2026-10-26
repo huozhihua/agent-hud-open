@@ -7,8 +7,8 @@ use tauri::{Emitter, Manager};
 
 use super::{
     emit_drag_end, emit_drag_preview, emit_geometry, host, owner_for_window, poll_drag,
-    restore_drag, set_drag_cursor, wayland_session, DragTick, HudGeometry, HudInputStatus,
-    HudPointer, HudState, HudWindows, InteractiveRegion, Point, PointerKeys, Shared,
+    restore_drag, set_drag_cursor, DragTick, HudGeometry, HudInputStatus, HudPointer, HudState,
+    HudWindows, InteractiveRegion, Point, PointerKeys, Shared,
 };
 
 /// A single native owner follows every interactive rectangle. No GUI is created here.
@@ -20,8 +20,8 @@ pub async fn hud_report_regions(
     windows: tauri::State<'_, HudWindows>,
 ) -> Result<HudInputStatus, String> {
     let shared = owner_for_window(&windows.0, &window)?;
-    if wayland_session() {
-        return Err("Global pointer hit testing is unsupported on Wayland".into());
+    if let Some(reason) = host::edge_hud_unsupported() {
+        return Err(reason.into());
     }
     if regions.iter().any(|region| {
         !region.x.is_finite()
@@ -426,9 +426,11 @@ pub(super) fn apply_ignore_cursor(
     force: bool,
 ) -> Result<(), String> {
     if force || state.last_ignore_cursor != Some(ignored) {
-        window
-            .set_ignore_cursor_events(ignored)
-            .map_err(|error| error.to_string())?;
+        host::set_ignore_cursor(
+            window,
+            ignored,
+            state.regions.as_deref().unwrap_or_default(),
+        )?;
         state.last_ignore_cursor = Some(ignored);
     }
     Ok(())

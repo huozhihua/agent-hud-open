@@ -102,8 +102,10 @@ than a condition in shared code.
   PowerShell wrapper, a `.cmd` launcher and a native `.exe` have different process
   lifecycles; the host adapter must handle the actual client installation.
 - On Linux, XDG locations, available process tools and packaging differ. X11 and
-  Wayland also have different HUD capabilities. The current host refuses an edge
-  HUD on Wayland and does not implement native Linux edge dragging.
+  Wayland also have different HUD capabilities. On Wayland the host shows an edge
+  HUD only as a wlr-layer-shell surface, which also drags natively, and refuses
+  it on compositors without that protocol (GNOME). Native edge dragging is not
+  implemented on X11.
 - WSL is a distinct source environment. It must preserve source identity and
   Windows/WSL ownership when an adapter is added; scanning Windows and WSL paths
   indiscriminately would risk duplicate usage. Automatic WSL discovery is absent.

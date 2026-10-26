@@ -48,6 +48,18 @@ pub(super) fn place(
     Ok((actual, canvas))
 }
 
+/// Ignoring the cursor passes the whole window through; the regions are only
+/// hit-tested by the pointer poll.
+pub(super) fn set_ignore_cursor(
+    window: &tauri::WebviewWindow,
+    ignored: bool,
+    _regions: &[super::InteractiveRegion],
+) -> Result<(), String> {
+    window
+        .set_ignore_cursor_events(ignored)
+        .map_err(|error| error.to_string())
+}
+
 pub(super) fn shown(window: &tauri::WebviewWindow, _configured_visible: bool) -> bool {
     window.is_visible().unwrap_or(false)
 }

@@ -38,7 +38,7 @@ pub async fn hud_drag_start(
     windows: tauri::State<'_, HudWindows>,
 ) -> Result<(), String> {
     let shared = owner_for_window(&windows.0, &window)?;
-    if !host::NATIVE_DRAG {
+    if !host::native_drag() {
         return Err(format!(
             "Native HUD dragging is unsupported on {}; a global mouse-button backend is required",
             std::env::consts::OS
@@ -202,12 +202,14 @@ pub(super) fn preview_drag(
     // re-running AppKit and Tao round trips on every 16 ms sample made the drag stutter.
     let scale = display.monitor.scale_factor();
     let frame = edge_frame(monitor_bounds(&display.monitor), scale, &config);
-    let unchanged = state.geometry.as_ref().is_some_and(|geometry| {
-        (geometry.canvas.x - f64::from(frame.x) / scale).abs() < 0.5
-            && (geometry.canvas.y - f64::from(frame.y) / scale).abs() < 0.5
-            && (geometry.canvas.width - f64::from(frame.width) / scale).abs() < 0.5
-            && (geometry.canvas.height - f64::from(frame.height) / scale).abs() < 0.5
-    });
+    // A host whose canvas covers the drag's whole display never needs one either.
+    let unchanged = host::fixed_canvas() && state.geometry.is_some()
+        || state.geometry.as_ref().is_some_and(|geometry| {
+            (geometry.canvas.x - f64::from(frame.x) / scale).abs() < 0.5
+                && (geometry.canvas.y - f64::from(frame.y) / scale).abs() < 0.5
+                && (geometry.canvas.width - f64::from(frame.width) / scale).abs() < 0.5
+                && (geometry.canvas.height - f64::from(frame.height) / scale).abs() < 0.5
+        });
     if unchanged {
         if let Some(current) = state.config.as_mut() {
             current.mode = config.mode;

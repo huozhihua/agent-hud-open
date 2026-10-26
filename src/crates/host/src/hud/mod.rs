@@ -18,14 +18,17 @@ mod types;
 // The native HUD host. macos.rs, windows.rs and linux.rs each provide the same
 // items, and the rest of this folder never branches on the operating system:
 //   GLOBAL_POINTS, COORDINATE_SPACE      how the pointer and geometry are expressed
-//   NATIVE_DRAG                          whether an edge drag can follow the button
+//   native_drag                          whether an edge drag can follow the button
+//   fixed_canvas                         whether the canvas stays put while a drag
+//                                          previews another edge or offset
 //   panel_builder, place, shown          create, position and show a HUD window
 //   measure_screens, screen              display identity, notch and menu bar
 //   TextFocusOrigin, begin_text_focus,   the explicit keyboard-focus lease
 //     end_text_focus
+//   set_ignore_cursor                    pass input through all but the reported regions
 //   set_drag_cursor, global_pointer,     pointer and button state while hovering
 //     left_mouse_down, pointer_keys        or dragging
-//   wayland_session, capabilities        what this host cannot do
+//   edge_hud_unsupported, capabilities   what this host cannot do
 // generic.rs holds the pieces that need only Tauri's own window API; a host
 // re-exports those until it has a native adapter.
 #[cfg(not(target_os = "macos"))]
@@ -147,7 +150,7 @@ fn owner_for_window(
         .ok_or_else(|| "The HUD surface is not attached to a connected screen".into())
 }
 
-use host::wayland_session;
+use host::edge_hud_unsupported;
 
 /// Ends the owners of screens no longer connected: their windows stop taking
 /// input and close, and a drag on one is cancelled. Runs before newly
@@ -333,8 +336,8 @@ fn configure(
             geometry: state.geometry.clone(),
         });
     }
-    if wayland_session() {
-        return Err("Edge HUD positioning is unsupported on Wayland; a layer-shell backend is required. Use the dashboard or tray.".into());
+    if let Some(reason) = edge_hud_unsupported() {
+        return Err(reason.into());
     }
     if !config.width.is_finite()
         || !config.height.is_finite()

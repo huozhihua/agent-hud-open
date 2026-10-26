@@ -26,7 +26,14 @@ use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 /// NSEvent reports the pointer in one global point plane across displays.
 pub(super) const GLOBAL_POINTS: bool = true;
 pub(super) const COORDINATE_SPACE: &str = "global-logical-top-left";
-pub(super) const NATIVE_DRAG: bool = true;
+
+pub(super) fn native_drag() -> bool {
+    true
+}
+
+pub(super) fn fixed_canvas() -> bool {
+    false
+}
 
 /// The HUD is a nonactivating NSPanel, chosen before allocation.
 pub(super) fn panel_builder<'a>(
@@ -82,8 +89,20 @@ pub(super) fn shown(_window: &tauri::WebviewWindow, configured_visible: bool) ->
     configured_visible
 }
 
-pub(super) fn wayland_session() -> bool {
-    false
+pub(super) fn edge_hud_unsupported() -> Option<&'static str> {
+    None
+}
+
+/// Ignoring the cursor passes the whole panel through; the regions are only
+/// hit-tested by the pointer poll.
+pub(super) fn set_ignore_cursor(
+    window: &tauri::WebviewWindow,
+    ignored: bool,
+    _regions: &[super::InteractiveRegion],
+) -> Result<(), String> {
+    window
+        .set_ignore_cursor_events(ignored)
+        .map_err(|error| error.to_string())
 }
 
 /// The AppKit screen whose frame matches this Tauri monitor.
@@ -144,7 +163,7 @@ pub(super) fn capabilities() -> HudCapabilities {
         keyboard_handoff: true,
         cursor_passthrough: true,
         interactive_regions: true,
-        native_drag: NATIVE_DRAG,
+        native_drag: native_drag(),
         global_pointer: "native_cursor_polling",
         absolute_edge_position: "supported",
         all_workspaces: "configured_unverified",

@@ -2,8 +2,8 @@
 //! pixels, with Win32 button and modifier state. Geometry, hover and drag state
 //! stay in the shared owner.
 pub(super) use super::generic::{
-    begin_text_focus, end_text_focus, global_pointer, panel_builder, place, set_drag_cursor, shown,
-    TextFocusOrigin,
+    begin_text_focus, end_text_focus, global_pointer, panel_builder, place, set_drag_cursor,
+    set_ignore_cursor, shown, TextFocusOrigin,
 };
 use super::{base_limitations, HudCapabilities, PointerKeys};
 #[path = "windows/displays.rs"]
@@ -13,10 +13,17 @@ pub(super) use displays::{measure_screens, screen};
 /// Windows reports global physical desktop pixels, with a per-window DPI scale.
 pub(super) const GLOBAL_POINTS: bool = false;
 pub(super) const COORDINATE_SPACE: &str = "monitor-scaled-physical-top-left";
-pub(super) const NATIVE_DRAG: bool = true;
 
-pub(super) fn wayland_session() -> bool {
+pub(super) fn native_drag() -> bool {
+    true
+}
+
+pub(super) fn fixed_canvas() -> bool {
     false
+}
+
+pub(super) fn edge_hud_unsupported() -> Option<&'static str> {
+    None
 }
 
 fn key_down(virtual_key: i32) -> bool {
@@ -87,7 +94,7 @@ pub(super) fn capabilities() -> HudCapabilities {
         keyboard_handoff: false,
         cursor_passthrough: true,
         interactive_regions: true,
-        native_drag: NATIVE_DRAG,
+        native_drag: native_drag(),
         global_pointer: "native_cursor_polling",
         absolute_edge_position: "supported",
         all_workspaces: "unsupported",
