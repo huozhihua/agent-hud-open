@@ -225,6 +225,24 @@ fn a_log_without_stamps_is_named_by_its_client() {
 }
 
 #[test]
+fn a_client_without_clients_of_its_own_is_its_one_interface() {
+    for (agent, tag) in [
+        ("antigravity", "ide:antigravity"),
+        ("deepseek", "others:deepseek"),
+    ] {
+        assert_eq!(
+            origins(resolve(
+                agent,
+                &PromptStamps::default(),
+                None,
+                &Reports::default()
+            )),
+            (Some(tag.into()), Some(tag.into()))
+        );
+    }
+}
+
+#[test]
 fn hook_records_carry_their_first_surface() {
     let data = json!({"surface":"cli:ghostty","first":{"surface":"cli:iterm","at":T}});
     assert_eq!(

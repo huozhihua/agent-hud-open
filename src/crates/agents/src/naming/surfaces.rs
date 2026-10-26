@@ -385,18 +385,16 @@ fn prompt_surface(
 }
 
 /// A session's two tags from its log's prompts and its reports. `client` is
-/// the client the log names now, for a log stamped before prompts were.
+/// the client the log names now, for a log stamped before prompts were or
+/// one with no prompt marks; a client that names no client of its own runs
+/// in its one interface.
 pub fn resolve(
     agent: &str,
     prompts: &PromptStamps,
     client: Option<&str>,
     reports: &Reports,
 ) -> Origins {
-    let fallback = || {
-        client
-            .filter(|c| !c.is_empty())
-            .map(|client| from_log(agent, Some(client), None))
-    };
+    let fallback = || Some(from_log(agent, client, None));
     let init = match &prompts.first {
         Some(stamp) => Some(prompt_surface(
             agent,
