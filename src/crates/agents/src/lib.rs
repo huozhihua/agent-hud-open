@@ -11,6 +11,7 @@ mod agent;
 mod change;
 pub mod channel;
 pub mod discovery;
+pub mod endpoints;
 pub mod hooks;
 mod location;
 pub mod naming;

@@ -178,6 +178,36 @@ pub(crate) fn within_retention(file: &FileStamp, now_ms: i64) -> bool {
     })
 }
 
+/// Records a Claude Code log's calls under the route its session's hook
+/// said they go through (`pricing::claude_route`), a sub-agent's log under its
+/// session's; a local server's reported window becomes the calls' window.
+pub(crate) fn route_claude_calls(
+    db: &rusqlite::Connection,
+    log: &Log,
+    events: &mut [agent_hud_agents::transcript::metering::Event],
+) -> rusqlite::Result<()> {
+    let mut endpoint = crate::database::endpoints::find(db, "claude", &log.id)?;
+    if endpoint.is_none() {
+        if let Some(parent) = log.live.parent_id.as_deref() {
+            endpoint = crate::database::endpoints::find(db, "claude", parent)?;
+        }
+    }
+    let Some(endpoint) = endpoint else {
+        return Ok(());
+    };
+    for event in events.iter_mut().filter(|event| !event.model.contains('#')) {
+        if let Some(route) = crate::pricing::claude_route(&endpoint, &event.model) {
+            if crate::pricing::is_local_route(&route) {
+                event.context_window = event
+                    .context_window
+                    .or_else(|| endpoint["contextWindow"].as_u64());
+            }
+            event.model = format!("{}#{route}", event.model);
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn needs_read(log: Option<&LogHead>, file: &FileStamp) -> bool {
     log.is_none_or(|log| {
         log.gone
@@ -856,13 +886,13 @@ impl AgentHudCore {
                             metering::remove_between(&transaction, &path_str, *from, *to)
                                 .map_err(|e| e.to_string())?;
                     }
-                    let written = metering::write(
-                        &transaction,
-                        &path_str,
-                        source,
-                        &log.meter_events.values().cloned().collect::<Vec<_>>(),
-                    )
-                    .map_err(|e| e.to_string())?;
+                    let mut events = log.meter_events.values().cloned().collect::<Vec<_>>();
+                    if source == "claude" {
+                        route_claude_calls(&transaction, &log, &mut events)
+                            .map_err(|e| e.to_string())?;
+                    }
+                    let written = metering::write(&transaction, &path_str, source, &events)
+                        .map_err(|e| e.to_string())?;
                     let marked = metering::write_marks(&transaction, &path_str, &log.meter_marks)
                         .map_err(|e| e.to_string())?;
                     // The session's costs follow its calls as they are now.

@@ -401,6 +401,21 @@ impl AgentHudCore {
     }
 
     pub fn ingest_hook_events(&mut self, events: Vec<agent_hud_agents::HookEvent>) {
+        // Where each session's calls go, kept for the reads of its log.
+        if let Some(db) = &self.database {
+            for event in events
+                .iter()
+                .filter(|event| event.kind == "origin" && event.data["endpoint"].is_object())
+            {
+                let _ = database::endpoints::record(
+                    db,
+                    &event.source,
+                    &event.session_id,
+                    &event.data["endpoint"],
+                    event.at_ms,
+                );
+            }
+        }
         self.hook_events
             .ingest(&events, Utc::now().timestamp_millis());
     }

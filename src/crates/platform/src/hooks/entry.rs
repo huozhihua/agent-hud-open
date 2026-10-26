@@ -132,6 +132,12 @@ fn handle_payload(arguments: &[String], data: &Path, input: &[u8], output: &mut 
             if let (Some(data), Some(origin)) = (event.data.as_object_mut(), origin.as_object()) {
                 data.extend(origin.clone());
             }
+            // Where the session's calls go; a local server is asked what it
+            // is only when the session starts.
+            if source == "claude" {
+                let starting = payload["hook_event_name"] == "SessionStart";
+                event.data["endpoint"] = super::endpoint::claude(&env, starting);
+            }
         }
         let _ = super::record_event(data, &event);
         let _ = super::transport::send(

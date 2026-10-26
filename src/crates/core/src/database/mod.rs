@@ -4,6 +4,7 @@
 //! metering events/buckets, quota samples, and source staging tables.
 
 pub(crate) mod checkpoints;
+pub(crate) mod endpoints;
 pub(crate) mod metering;
 pub(crate) mod staging;
 
@@ -53,6 +54,13 @@ pub(crate) fn schema(db: &Connection) -> rusqlite::Result<()> {
             PRIMARY KEY(source, session_id)
         );
         CREATE INDEX IF NOT EXISTS session_mapping_updated ON session_mapping(updated_at_ms);
+        CREATE TABLE IF NOT EXISTS session_endpoint(
+            source TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            endpoint TEXT NOT NULL,
+            updated_at_ms INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY(source, session_id)
+        );
 
         CREATE TABLE IF NOT EXISTS quota_sample(
             window_id TEXT NOT NULL,

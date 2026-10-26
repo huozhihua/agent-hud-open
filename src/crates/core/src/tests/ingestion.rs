@@ -57,6 +57,86 @@ fn a_codex_call_carries_its_provider_as_its_route_unless_it_is_openai() {
 }
 
 #[test]
+fn a_claude_call_is_recorded_under_the_route_its_session_reported() {
+    let db = rusqlite::Connection::open_in_memory().unwrap();
+    crate::database::schema(&db).unwrap();
+    let event = |model: &str| agent_hud_agents::transcript::metering::Event {
+        key: model.into(),
+        model: model.into(),
+        ..Default::default()
+    };
+    let routed = |session: &str, endpoint: Option<serde_json::Value>| {
+        if let Some(endpoint) = endpoint {
+            crate::database::endpoints::record(&db, "claude", session, &endpoint, 1).unwrap();
+        }
+        let mut log = Log::new("session.jsonl".into(), "claude");
+        log.id = session.into();
+        let mut events = vec![event("claude-sonnet-4-5"), event("qwen3-coder:30b")];
+        crate::ingestion::route_claude_calls(&db, &log, &mut events).unwrap();
+        events
+            .into_iter()
+            .map(|event| (event.model, event.context_window))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        routed("none", None),
+        [
+            ("claude-sonnet-4-5".into(), None),
+            ("qwen3-coder:30b".into(), None)
+        ],
+        "no report: as before"
+    );
+    assert_eq!(
+        routed("anthropic", Some(json!({"host": null, "platform": null})))[0].0,
+        "claude-sonnet-4-5"
+    );
+    assert_eq!(
+        routed("glm", Some(json!({"host": "api.z.ai", "platform": null})))[0].0,
+        "claude-sonnet-4-5",
+        "a vendor's own API is priced by model name"
+    );
+    assert_eq!(
+        routed(
+            "relay",
+            Some(json!({"host": "relay.example.com", "platform": null}))
+        )[0]
+        .0,
+        "claude-sonnet-4-5#relay.example.com"
+    );
+    assert_eq!(
+        routed(
+            "bedrock",
+            Some(json!({"host": null, "platform": "bedrock"}))
+        )[0]
+        .0,
+        "claude-sonnet-4-5#bedrock"
+    );
+    assert_eq!(
+        routed(
+            "ollama",
+            Some(
+                json!({"host": "localhost:11434", "platform": null, "server": "ollama", "contextWindow": 32768})
+            )
+        ),
+        [
+            ("claude-sonnet-4-5#ollama".into(), Some(32_768)),
+            ("qwen3-coder:30b#ollama".into(), Some(32_768))
+        ]
+    );
+    assert_eq!(
+        routed(
+            "gateway",
+            Some(json!({"host": "localhost:4000", "platform": null}))
+        ),
+        [
+            ("claude-sonnet-4-5#localhost:4000".into(), None),
+            ("qwen3-coder:30b#local".into(), None)
+        ],
+        "no server found: a priced model goes through a gateway, any other runs here"
+    );
+}
+
+#[test]
 fn claude_streamed_message_snapshots_replace_the_same_usage() {
     let mut log = Log::new("session.jsonl".into(), "claude");
     let row = |output| json!({"type":"assistant","message":{"id":"m1","usage":{"input_tokens":10,"output_tokens":output,"cache_read_input_tokens":30,"cache_creation_input_tokens":5}}});

@@ -276,6 +276,29 @@ fn local(consumer: &str) -> bool {
         .is_some_and(|(_, route)| is_local_route(route))
 }
 
+/// The route a Claude Code call to `model` is recorded under, from where its
+/// session's hook said its calls go (`database::endpoints`): None for
+/// Anthropic's or another vendor's own API, whose models are priced by name;
+/// the cloud platform; the relay's host; a local model server's kind, which is
+/// free; and for a local address no server was found at, its host when the
+/// model has a list price (a gateway to a paid API), else `local`.
+pub(crate) fn claude_route(endpoint: &serde_json::Value, model: &str) -> Option<String> {
+    use agent_hud_agents::endpoints::{host_kind, HostKind};
+    if let Some(platform) = endpoint["platform"].as_str() {
+        return Some(platform.to_owned());
+    }
+    let host = endpoint["host"].as_str()?;
+    match host_kind(host) {
+        HostKind::Official | HostKind::Vendor => None,
+        HostKind::Relay => Some(host.to_owned()),
+        HostKind::Local => match endpoint["server"].as_str() {
+            Some(server) if is_local_route(server) => Some(server.to_owned()),
+            _ if listed(&format!("claude-model:{model}")).is_some() => Some(host.to_owned()),
+            _ => Some("local".into()),
+        },
+    }
+}
+
 /// What a local call costs: nothing, in US dollars.
 fn free() -> ModelCost {
     ModelCost::new(Region::International.currency(), 0)

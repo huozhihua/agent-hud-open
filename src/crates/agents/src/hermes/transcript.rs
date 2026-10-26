@@ -119,7 +119,11 @@ pub fn read(db: &Connection, path: &Path, cursor: &Value) -> rusqlite::Result<Pa
                     title: title.clone(),
                     title_fallback: title_fallback.clone(),
                     cwd: cwd.clone(),
-                    model: sql_model(sql_text(row, 0)),
+                    model: routed(
+                        sql_model(sql_text(row, 0)),
+                        sql_text(row, 1),
+                        sql_text(row, 2),
+                    ),
                     key,
                     at: sql_time(row, 9, true).unwrap_or(started),
                     usage: Usage {
@@ -154,7 +158,11 @@ pub fn read(db: &Connection, path: &Path, cursor: &Value) -> rusqlite::Result<Pa
                 title,
                 title_fallback,
                 cwd,
-                model: sql_model(sql_text(row, 6)),
+                model: routed(
+                    sql_model(sql_text(row, 6)),
+                    sql_text(row, 7),
+                    sql_text(row, 8),
+                ),
                 key: format!("usage:{}:{}", id, serde_json::to_string(&parts).unwrap()),
                 at: started,
                 usage: Usage {
@@ -193,4 +201,13 @@ pub fn read(db: &Connection, path: &Path, cursor: &Value) -> rusqlite::Result<Pa
             })
         }),
     })
+}
+
+/// A Hermes model with the route its billing provider and address name
+/// (`endpoints::provider_route`), so a relay is not priced at a vendor's list.
+fn routed(model: String, provider: Option<String>, base_url: Option<String>) -> String {
+    match crate::endpoints::provider_route(provider.as_deref(), base_url.as_deref()) {
+        Some(route) => format!("{model}#{route}"),
+        None => model,
+    }
 }

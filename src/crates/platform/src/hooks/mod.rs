@@ -9,6 +9,7 @@ use std::{
 
 mod clients;
 mod completion;
+mod endpoint;
 mod entry;
 mod inbox;
 mod install;
