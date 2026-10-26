@@ -8,7 +8,7 @@
 use chrono::{Datelike, FixedOffset, TimeZone, Timelike};
 use serde::Deserialize;
 use std::collections::HashMap;
-use std::sync::OnceLock;
+use std::sync::{OnceLock, RwLock};
 
 mod regions;
 pub use regions::PriceRegions;
@@ -299,6 +299,60 @@ pub(crate) fn claude_route(endpoint: &serde_json::Value, model: &str) -> Option<
     }
 }
 
+/// A relay's own prices (agents `relays`), per token in pico units of its
+/// currency, by model: input, output, cache read, cache write.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RoutePrices {
+    pub currency: String,
+    pub models: HashMap<String, [i128; 4]>,
+}
+
+fn route_prices() -> &'static RwLock<HashMap<String, RoutePrices>> {
+    static PRICES: OnceLock<RwLock<HashMap<String, RoutePrices>>> = OnceLock::new();
+    PRICES.get_or_init(Default::default)
+}
+
+/// Replaces the relays' prices, by route (the relay's host); true when they
+/// changed.
+pub(crate) fn set_route_prices(prices: HashMap<String, RoutePrices>) -> bool {
+    let Ok(mut held) = route_prices().write() else {
+        return false;
+    };
+    let changed = *held != prices;
+    *held = prices;
+    changed
+}
+
+/// What `consumer`'s model costs on its relay route, when the relay lists
+/// it: by its exact name, else by the same name without a date.
+fn route_rates(consumer: &str) -> Option<(String, [i128; 4])> {
+    let (rest, route) = consumer.split_once('#')?;
+    let model = rest.split_once("-model:").map_or(rest, |(_, model)| model);
+    let all = route_prices().read().ok()?;
+    let prices = all.get(route)?;
+    let rates = prices.models.get(model).or_else(|| {
+        let name = normalized_model_name(model)?;
+        prices
+            .models
+            .iter()
+            .find(|(listed, _)| normalized_model_name(listed).as_deref() == Some(name.as_str()))
+            .map(|(_, rates)| rates)
+    })?;
+    Some((prices.currency.clone(), *rates))
+}
+
+/// What `tokens` cost at a relay's `rates`.
+fn route_cost(currency: &str, rates: [i128; 4], tokens: &PriceTokens) -> ModelCost {
+    let fresh = tokens.tokens_in.saturating_sub(tokens.cache_write) as i128;
+    ModelCost::new(
+        currency,
+        fresh * rates[0]
+            + tokens.tokens_out as i128 * rates[1]
+            + tokens.cache_read as i128 * rates[2]
+            + tokens.cache_write as i128 * rates[3],
+    )
+}
+
 /// What a local call costs: nothing, in US dollars.
 fn free() -> ModelCost {
     ModelCost::new(Region::International.currency(), 0)
@@ -363,7 +417,7 @@ pub(crate) fn cost_at(
 /// A call is in the last tier whose start its prompt reaches.
 pub(crate) fn tier_starts(source: &str, model: &str) -> Option<Vec<u64>> {
     let consumer = format!("{source}-model:{model}");
-    if local(&consumer) {
+    if local(&consumer) || route_rates(&consumer).is_some() {
         return Some(Vec::new());
     }
     let listing = listing(&consumer, Region::International)?;
@@ -420,6 +474,9 @@ pub(crate) fn cost_in_tier(
     if local(&consumer) {
         return Some(free());
     }
+    if let Some((currency, rates)) = route_rates(&consumer) {
+        return Some(route_cost(&currency, rates, tokens));
+    }
     let listing = listing(&consumer, Region::International)?;
     let amount = listing.price.rates(tier).amount(KindTokens::from(tokens))?;
     Some(ModelCost::new(listing.region.currency(), amount))
@@ -434,6 +491,9 @@ pub fn consumer_cost(
 ) -> Option<ModelCost> {
     if local(consumer) {
         return Some(free());
+    }
+    if let Some((currency, rates)) = route_rates(consumer) {
+        return Some(route_cost(&currency, rates, tokens));
     }
     let listing = listing(consumer, region)?;
     let kinds = KindTokens::from(tokens);
@@ -475,6 +535,65 @@ mod tests {
         );
         assert_eq!(cost("codex", "gpt-6-sol#myrelay", &tokens), None, "a relay");
         assert!(cost("codex", "gpt-6-sol", &tokens).is_some_and(|cost| cost > 0));
+    }
+
+    #[test]
+    fn a_relay_route_takes_the_relays_own_prices() {
+        let tokens = PriceTokens {
+            tokens_in: 1_200,
+            tokens_out: 100,
+            cache_read: 5_000,
+            cache_write: 200,
+            reasoning: 0,
+        };
+        set_route_prices(HashMap::from([(
+            "relay-test.example.com".to_string(),
+            RoutePrices {
+                currency: "CNY".into(),
+                models: HashMap::from([("claude-sonnet-4-5".to_string(), [10, 50, 1, 12])]),
+            },
+        )]));
+        let expected = 1_000 * 10 + 100 * 50 + 5_000 + 200 * 12;
+        let charged = cost_at(
+            "claude",
+            "claude-sonnet-4-5-20250929#relay-test.example.com",
+            &tokens,
+            true,
+            Region::International,
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            (charged.currency.as_str(), charged.amount_pico),
+            ("CNY", expected),
+            "dated name, the relay's list"
+        );
+        assert_eq!(
+            tier_starts("claude", "claude-sonnet-4-5#relay-test.example.com"),
+            Some(Vec::new())
+        );
+        assert_eq!(
+            cost("claude", "claude-opus-4-5#relay-test.example.com", &tokens),
+            None,
+            "a model the relay does not list"
+        );
+        assert_eq!(
+            cost(
+                "claude",
+                "claude-sonnet-4-5#other-relay.example.com",
+                &tokens
+            ),
+            None
+        );
+        set_route_prices(HashMap::new());
+        assert_eq!(
+            cost(
+                "claude",
+                "claude-sonnet-4-5#relay-test.example.com",
+                &tokens
+            ),
+            None
+        );
     }
 
     #[test]

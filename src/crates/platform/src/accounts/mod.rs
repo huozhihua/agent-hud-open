@@ -34,6 +34,8 @@ pub(super) struct AccountContext {
     pub children: Arc<Mutex<Vec<Weak<Mutex<Child>>>>>,
     pub cancelled: Arc<AtomicBool>,
     pub copilot_consent: Arc<AtomicBool>,
+    /// The relay addresses the owner agreed to read (`relays::CONSENT`).
+    pub relay_consent: Arc<Mutex<HashSet<String>>>,
 }
 use agent_hud_agents::account::Reading as AccountReading;
 
@@ -43,7 +45,7 @@ type Reader = fn(&dyn agents::Host) -> Result<AccountReading, String>;
 /// One reading at a time, in this order, as UsageCollector runs the sources'
 /// account steps: Claude, Codex, DeepSeek, then the additional sources in
 /// AdditionalSource order, then the open agents (CombinedUsageProvider).
-const READERS: [(&str, Reader); 11] = [
+const READERS: [(&str, Reader); 12] = [
     ("claude", agents::claude::account::read),
     ("codex", agents::codex::account::read),
     ("deepseek", agents::deepseek::account::read),
@@ -55,6 +57,7 @@ const READERS: [(&str, Reader); 11] = [
     ("kimi", agents::coding_plans::kimi),
     ("glm", agents::coding_plans::glm),
     ("opencode", agents::coding_plans::opencode_go),
+    ("relay", agents::relays::read),
 ];
 
 /// Whether this Mac's work moves the provider's windows. Codex's are spent
@@ -73,6 +76,8 @@ fn work_sources(provider: &str) -> &[&str] {
     match provider {
         "grok-bot" => &["grok-bot", "grok-cli"],
         "kimi" | "glm" | "opencode" => &["opencode", "kimi", "glm", "pi"],
+        // A relay is spent by the clients configured with it.
+        "relay" => &["claude", "codex"],
         _ => READERS
             .iter()
             .find(|(id, _)| *id == provider)
@@ -184,6 +189,7 @@ impl AccountService {
             children: Arc::clone(&children),
             cancelled: Arc::clone(&cancelled),
             copilot_consent: Arc::new(AtomicBool::new(false)),
+            relay_consent: Arc::new(Mutex::new(HashSet::new())),
         };
         let shared = Arc::new(Shared {
             state: Mutex::new(Control {
@@ -317,6 +323,27 @@ impl AccountService {
                 state.force.insert("copilot".into());
             }
         }
+        let relays: HashSet<String> = snapshot["settings"][agent_hud_agents::relays::CONSENT]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|host| host.as_str().map(str::to_owned))
+            .collect();
+        let relays_changed = self
+            .context
+            .relay_consent
+            .lock()
+            .map(|mut held| {
+                let changed = *held != relays;
+                *held = relays;
+                changed
+            })
+            .unwrap_or(false);
+        if relays_changed {
+            if let Ok(mut state) = self.shared.state.lock() {
+                state.force.insert("relay".into());
+            }
+        }
         let mut enabled: HashSet<String> = snapshot["providers"]
             .as_array()
             .into_iter()
@@ -352,6 +379,10 @@ impl AccountService {
                 .any(|value| value["id"] == "codex" && value["enabled"] == true)
         {
             enabled.insert("codex".into());
+        }
+        // Relays are found in Claude Code's and Codex's configuration.
+        if enabled.contains("claude") || enabled.contains("codex") {
+            enabled.insert("relay".into());
         }
         for provider in account_homes.keys() {
             if snapshot["providers"]

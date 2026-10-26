@@ -88,6 +88,15 @@ impl Host for AccountContext {
         credentials::read(self, agent)
     }
     fn consented(&self, setting: &str) -> bool {
+        if let Some(relay) = setting
+            .strip_prefix(agent_hud_agents::relays::CONSENT)
+            .and_then(|rest| rest.strip_prefix(':'))
+        {
+            return self
+                .relay_consent
+                .lock()
+                .is_ok_and(|agreed| agreed.contains(relay));
+        }
         setting == agent_hud_agents::copilot::account::CONSENT
             && self.copilot_consent.load(Ordering::Acquire)
     }

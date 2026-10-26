@@ -90,7 +90,9 @@ impl ListTally {
             unpriced_tokens: self.unpriced_tokens,
         };
         for ((source, model, tier), usage) in &self.groups {
-            match pricing::cost_in_tier(source, model, &metering::price_tokens(*usage), *tier) {
+            match pricing::cost_in_tier(source, model, &metering::price_tokens(*usage), *tier)
+                .filter(|priced| priced.currency == "USD")
+            {
                 Some(priced) => cost.priced = Some(cost.priced.unwrap_or(0) + priced.amount_pico),
                 None => cost.unpriced_tokens += usage.total(),
             }

@@ -85,6 +85,16 @@ export default function SourcesSettings({
     (account) => source && vendorKey(account.provider) === vendorKey(source.id),
   );
   const accounts = [...new Set(windows.map(quotaAccountKey))];
+  // The relays this client is configured with, and the ones agreed to.
+  const relays = (snapshot.relays ?? []).filter(
+    (relay) => source && relay.client === source.id,
+  );
+  const consented = snapshot.settings.relayReading ?? [];
+  const relayKinds: Record<string, string> = {
+    newapi: "New API",
+    sub2api: "Sub2API",
+    openrouter: "OpenRouter",
+  };
   const fields = (
     (source?.accountStatus as unknown as { configurableFields?: string[] })
       ?.configurableFields ?? []
@@ -541,6 +551,69 @@ export default function SourcesSettings({
                     )
                   }
                 />
+              </div>
+            </section>
+          )}
+          {relays.length > 0 && (
+            <section>
+              <h3 style={{ fontSize: 14 }}>{t("Relays", "中转站")}</h3>
+              <p
+                style={{
+                  fontSize: 12,
+                  color: "var(--muted-foreground)",
+                  margin: "0 0 8px",
+                }}
+              >
+                {t(
+                  `Read a relay's balance with the key ${source.name} already uses for it. The key goes only to that address.`,
+                  `用 ${source.name} 已经为中转站配置的 key 读取它的余额。key 只发给这个地址。`,
+                )}
+              </p>
+              <div style={{ ...box, display: "grid", gap: 10 }}>
+                {relays.map((relay) => {
+                  const agreed = consented.includes(relay.provider);
+                  const kind = relay.kind ? relayKinds[relay.kind] : undefined;
+                  return (
+                    <div key={relay.provider} style={row}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <strong style={{ fontSize: 13 }}>
+                          {relay.provider}
+                        </strong>
+                        {(kind || relay.notice) && (
+                          <p
+                            style={{
+                              fontSize: 12,
+                              color: "var(--muted-foreground)",
+                              margin: "2px 0 0",
+                            }}
+                          >
+                            {[kind, relay.notice].filter(Boolean).join(" · ")}
+                          </p>
+                        )}
+                      </div>
+                      <Switch
+                        checked={agreed}
+                        disabled={pending}
+                        aria-label={t(
+                          `Read ${relay.provider}'s balance`,
+                          `读取 ${relay.provider} 的余额`,
+                        )}
+                        onCheckedChange={(value) =>
+                          void perform(() =>
+                            action("set_setting", {
+                              key: "relayReading",
+                              value: value
+                                ? [...consented, relay.provider]
+                                : consented.filter(
+                                    (host) => host !== relay.provider,
+                                  ),
+                            }),
+                          )
+                        }
+                      />
+                    </div>
+                  );
+                })}
               </div>
             </section>
           )}

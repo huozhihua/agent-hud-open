@@ -498,6 +498,8 @@ export interface AppSettings {
   language: string;
   clientHooks: boolean;
   readCopilotQuota?: boolean;
+  /** The relay hosts whose balance may be read with the key the client already sends them. */
+  relayReading?: string[];
   approvalWaitMinutes?: ApprovalWaitMinutes;
   launchAtLogin: boolean;
   appearanceFollowsScreen?: boolean;
@@ -597,6 +599,21 @@ export interface Snapshot {
   settings: AppSettings;
   capabilities: Capability[];
   billing: BillingAccount[];
+  /** From Core: the relays the clients are configured with, for consent in Settings. */
+  relays?: RelaySource[];
+}
+/** A relay a client is configured with (Claude Code's settings env, Codex's providers). */
+export interface RelaySource {
+  client: string;
+  /** The relay's host. */
+  provider: string;
+  product: "relay";
+  consented: boolean;
+  /** Which balance endpoint answered: newapi, sub2api, openrouter. */
+  kind?: string;
+  /** Why no balance was read. */
+  notice?: string;
+  checkedAt?: string | null;
 }
 export interface BillingPeriod {
   from: string;

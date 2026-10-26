@@ -108,9 +108,82 @@ impl crate::AgentHudCore {
             self.meters.view = None;
             self.statistics.revision = self.statistics.revision.wrapping_add(1);
         }
+        if pricing::set_route_prices(route_prices(&accounts.services)) {
+            // Calls through a relay are priced on its new list: what was left
+            // unpriced is priced again, and the rates and statistics follow.
+            for head in self.logs.values_mut() {
+                if head.unpriced_tokens.unwrap_or(0) > 0 {
+                    head.list_cost_priced = false;
+                }
+            }
+            self.meters.view = None;
+            self.statistics.revision = self.statistics.revision.wrapping_add(1);
+        }
         if self.accounts != accounts {
             self.render.accounts = self.render.accounts.wrapping_add(1);
             self.accounts = accounts;
         }
+    }
+}
+
+/// The relays' price lists the relay reader brought (`services` rows of
+/// product `relay` with `prices`: per million tokens), per token in pico
+/// units, by relay host.
+fn route_prices(services: &[Value]) -> HashMap<String, pricing::RoutePrices> {
+    services
+        .iter()
+        .filter(|row| row["product"] == "relay")
+        .filter_map(|row| {
+            let host = row["provider"].as_str()?;
+            let prices = &row["prices"];
+            let currency = prices["currency"].as_str()?;
+            let models = prices["models"]
+                .as_object()?
+                .iter()
+                .filter_map(|(model, rates)| {
+                    let rates = rates.as_array()?;
+                    let pico = |index: usize| -> Option<i128> {
+                        let per_million = rates.get(index)?.as_f64()?;
+                        (per_million.is_finite() && per_million >= 0.0)
+                            .then(|| (per_million * 1e6).round() as i128)
+                    };
+                    Some((model.clone(), [pico(0)?, pico(1)?, pico(2)?, pico(3)?]))
+                })
+                .collect::<HashMap<_, _>>();
+            (!models.is_empty()).then(|| {
+                (
+                    host.to_owned(),
+                    pricing::RoutePrices {
+                        currency: currency.to_owned(),
+                        models,
+                    },
+                )
+            })
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn a_relays_price_list_becomes_per_token_rates() {
+        let services = vec![
+            json!({"product": "relay", "provider": "relay.example.com", "client": "claude",
+                   "prices": {"currency": "CNY", "models": {"claude-sonnet-4-5": [21.0, 105.0, 2.1, 26.25], "bad": [1.0]}}}),
+            json!({"product": "relay", "provider": "quiet.example.com", "client": "claude"}),
+            json!({"product": "coding-plan", "provider": "zai", "client": "claude", "prices": {"currency": "USD", "models": {"x": [1, 1, 1, 1]}}}),
+        ];
+        let prices = route_prices(&services);
+        assert_eq!(prices.len(), 1, "only a relay with a list");
+        let relay = &prices["relay.example.com"];
+        assert_eq!(relay.currency, "CNY");
+        assert_eq!(
+            relay.models["claude-sonnet-4-5"],
+            [21_000_000, 105_000_000, 2_100_000, 26_250_000]
+        );
+        assert!(!relay.models.contains_key("bad"));
     }
 }

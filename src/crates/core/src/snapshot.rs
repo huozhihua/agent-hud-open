@@ -237,6 +237,7 @@ impl crate::AgentHudCore {
         let quotas = self.quota_rows(at, now, &pending_meter);
         let billing = self.billing_rows(at, &pending_meter);
         let accounts = self.account_rows();
+        let relays = self.relay_rows();
         let island_events = self
             .island_events
             .update(&sessions, &quotas, &accounts, now);
@@ -246,7 +247,7 @@ impl crate::AgentHudCore {
             .as_ref()
             .expect("usage projection prepared");
         Ok(
-            json!({"islandEvents":island_events,"schemaVersion":1,"statisticsRevision":self.statistics.revision,"sessionsRevision":self.sessions_revision,"sessionScope":"recent","indexing":indexing,"generatedAt":Utc::now().to_rfc3339(),"mode":if self.demo{"demo"}else{"live"},"connection":{"status":"connected","platform":self.platform,"message":notice.unwrap_or_else(|| l10n::text("本机会话日志与客户端事件；回调连接状态另行显示", "Local transcripts and client events; hook connection status is reported separately."))},"totals":projection.totals.json(),"quotas":quotas,"accounts":accounts,"sessions":sessions,"timeline":projection.timeline,"providers":providers,"approvals":approvals,"requestDeliveries":deliveries,"settings":self.settings,"language":if crate::l10n::chinese(){"zh"}else{"en"},"capabilities":serde_json::from_str::<Value>(include_str!("../../../packages/protocol/capabilities.json")).expect("checked-in capability manifest"),"billing":billing}),
+            json!({"islandEvents":island_events,"schemaVersion":1,"statisticsRevision":self.statistics.revision,"sessionsRevision":self.sessions_revision,"sessionScope":"recent","indexing":indexing,"generatedAt":Utc::now().to_rfc3339(),"mode":if self.demo{"demo"}else{"live"},"connection":{"status":"connected","platform":self.platform,"message":notice.unwrap_or_else(|| l10n::text("本机会话日志与客户端事件；回调连接状态另行显示", "Local transcripts and client events; hook connection status is reported separately."))},"totals":projection.totals.json(),"quotas":quotas,"accounts":accounts,"sessions":sessions,"timeline":projection.timeline,"providers":providers,"approvals":approvals,"requestDeliveries":deliveries,"settings":self.settings,"language":if crate::l10n::chinese(){"zh"}else{"en"},"capabilities":serde_json::from_str::<Value>(include_str!("../../../packages/protocol/capabilities.json")).expect("checked-in capability manifest"),"billing":billing,"relays":relays}),
         )
     }
 
@@ -607,6 +608,31 @@ impl crate::AgentHudCore {
                 row
             })
             .collect::<Vec<_>>()
+    }
+
+    /// The relays the clients are configured with, as Settings lists them for
+    /// the owner's consent: `{client, provider (the host), consented, kind,
+    /// notice}` with when they were last read.
+    fn relay_rows(&self) -> Vec<Value> {
+        let checked = &self
+            .accounts
+            .providers
+            .get("relay")
+            .map(|state| state["checkedAt"].clone());
+        self.accounts
+            .services
+            .iter()
+            .filter(|row| row["product"] == "relay" && self.shown(row, "client"))
+            .map(|row| {
+                let mut row = row.clone();
+                row["checkedAt"] = checked.clone().unwrap_or(Value::Null);
+                // The price list feeds pricing; Settings has no use for it.
+                if let Some(object) = row.as_object_mut() {
+                    object.remove("prices");
+                }
+                row
+            })
+            .collect()
     }
 
     /// The accounts of enabled clients, as their section headers show them.

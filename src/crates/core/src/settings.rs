@@ -126,6 +126,19 @@ impl crate::AgentHudCore {
                 if value
                     .as_u64()
                     .is_some_and(|v| [1, 3, 5, 10, 30, 60].contains(&v)) => {}
+            // The relay addresses whose balance may be read with the key the
+            // client already sends them (agents `relays::CONSENT`).
+            "relayReading"
+                if value.as_array().is_some_and(|hosts| {
+                    hosts.len() <= 64
+                        && hosts.iter().all(|host| {
+                            host.as_str().is_some_and(|host| {
+                                !host.is_empty()
+                                    && host.len() <= 260
+                                    && host.bytes().all(|b| b.is_ascii_graphic() && b != b'/')
+                            })
+                        })
+                }) => {}
             _ => return Err("Unsupported setting or invalid value".into()),
         }
         Ok(())

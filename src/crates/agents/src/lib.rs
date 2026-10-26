@@ -18,6 +18,7 @@ pub mod naming;
 mod os;
 pub mod process;
 pub mod protobuf;
+pub mod relays;
 pub mod replies;
 pub mod sqlite;
 pub mod transcript;

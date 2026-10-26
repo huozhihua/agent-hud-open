@@ -120,3 +120,16 @@ facts require matching source paths, parser codecs, file signatures and complete
 retained-history state; business event IDs stay stable for incremental updates.
 The original retained history is not described as all-time coverage. Ineligible
 files keep their bounded incremental replay and an explicit coverage state.
+
+## Relays
+
+Claude Code and Codex can send their calls through a relay (中转站): Claude Code's `ANTHROPIC_BASE_URL` in `~/.claude/settings.json` `env` (or Agent HUD's own environment), Codex's `[model_providers.<id>]` `base_url` in `config.toml`. The relay reader (`agents::relays`) lists every relay host it finds there with the key configured beside it; official and vendor hosts are not relays. Settings shows each one on the client's page, off by default.
+
+Nothing is sent to a relay until it is switched on (`relayReading`, a list of hosts). Then the key the client already sends that host is sent to the same host, over HTTPS, and nowhere else; Agent HUD keeps no copy of it. What is read:
+
+- OpenRouter: `/api/v1/credits` (credits left), else `/api/v1/key` (the key's remaining limit).
+- New API (one-api / new-api), told by its public `/api/status`: `/api/usage/token/` for the account's balance when the site lets the key read it, else the key's remaining quota, in the money the site shows; and its public `/api/pricing`, whose model and group ratios price the calls recorded under that relay's route.
+- Sub2API: `/v1/usage`.
+
+A balance becomes a billing row of the client (`vendor` `claude` or `codex`, `consumerRoutes` the host). A relay whose endpoints are not recognized shows a notice instead.
+

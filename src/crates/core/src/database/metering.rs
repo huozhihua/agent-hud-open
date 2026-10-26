@@ -405,7 +405,11 @@ pub(crate) fn list_cost(db: &Connection, path: &str) -> rusqlite::Result<Option<
                 cache_write: used.write,
                 reasoning: used.reasoning,
             };
-            match pricing::cost_in_tier(&source, &model, &tokens, tier) {
+            // Session costs are US dollars; a relay that prices in another
+            // currency leaves its calls unpriced there.
+            match pricing::cost_in_tier(&source, &model, &tokens, tier)
+                .filter(|priced| priced.currency == "USD")
+            {
                 Some(priced) => {
                     cost.priced = Some(cost.priced.unwrap_or(0) + priced.amount_pico);
                 }
@@ -590,7 +594,9 @@ pub(crate) fn recached(
 pub(crate) fn call_list_cost(source: &str, model: &str, used: Usage) -> Option<i128> {
     let starts = pricing::tier_starts(source, model)?;
     let tier = pricing::tier_of(&starts, used.input + used.write + used.read);
-    pricing::cost_in_tier(source, model, &price_tokens(used), tier).map(|cost| cost.amount_pico)
+    pricing::cost_in_tier(source, model, &price_tokens(used), tier)
+        .filter(|cost| cost.currency == "USD")
+        .map(|cost| cost.amount_pico)
 }
 
 /// A ledger row's tokens as the price list counts them: input with cache
