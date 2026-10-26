@@ -56,6 +56,11 @@ pub struct Origin {
     /// Whether the client's native channel knows the terminal the session
     /// runs in, as Codex's daemon does.
     pub ask_channel: bool,
+    /// The kind of interface the prompt was typed into (`naming::surfaces`).
+    pub category: Option<crate::naming::surfaces::Category>,
+    /// The app behind it when the client alone tells it (`claude` for the
+    /// Claude desktop app); otherwise platform names the app it runs under.
+    pub app: Option<&'static str>,
 }
 
 impl Origin {
@@ -66,6 +71,8 @@ impl Origin {
             target: Value::Null,
             interactive: false,
             ask_channel: false,
+            category: None,
+            app: None,
         }
     }
 }

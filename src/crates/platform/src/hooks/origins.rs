@@ -2,6 +2,7 @@
 //! read only from this callback; parent process environments are never decoded.
 //! Platform gathers the caller; each client's descriptor rules decide the host
 //! (`agents::process`).
+use agent_hud_agents::naming::surfaces::{self, Surface};
 use agent_hud_agents::process::{Ancestor, Caller};
 use serde_json::{json, Value};
 use std::{
@@ -67,7 +68,14 @@ pub(super) fn origin(
     else {
         return json!({"hostVerified":true,"host":"unsupported","navigationTarget":null});
     };
-    let mut origin = with_caller(agent, home, env, |caller| rule(caller, session));
+    let (mut origin, app) = with_caller(agent, home, env, |caller| {
+        let origin = rule(caller, session);
+        let app = origin.app.or_else(|| host_app(env, caller.ancestors));
+        (origin, app)
+    });
+    let surface = origin
+        .category
+        .map(|category| Surface::new(category, app.unwrap_or(surfaces::OTHERS)).tag());
     if origin.ask_channel {
         if let Some(target) = crate::clients::session_terminal(agent.id, session, home, env) {
             origin.target = target;
@@ -78,7 +86,29 @@ pub(super) fn origin(
             origin.target = target;
         }
     }
-    json!({"hostVerified":true,"host":origin.host,"navigationTarget":origin.target})
+    json!({"hostVerified":true,"host":origin.host,"navigationTarget":origin.target,"surface":surface})
+}
+/// The app a hook runs under: the one its environment names (macOS gives
+/// every process an app starts the app's bundle identifier, and a terminal
+/// names itself in `TERM_PROGRAM`), else the first ancestor inside a known
+/// app. The words are a label only; nothing is trusted on them.
+pub(crate) fn host_app(
+    env: &HashMap<String, String>,
+    ancestors: &[Ancestor],
+) -> Option<&'static str> {
+    let named = |key: &str| env.get(key).map(String::as_str).filter(|s| !s.is_empty());
+    named("__CFBundleIdentifier")
+        .and_then(surfaces::bundle_app)
+        .or_else(|| {
+            ancestors
+                .iter()
+                .find_map(|process| process.bundle.as_deref().and_then(surfaces::bundle_app))
+        })
+        .or_else(|| {
+            (named("TERMINAL_EMULATOR") == Some("JetBrains-JediTerm")).then_some("jetbrains")
+        })
+        .or_else(|| named("TERM_PROGRAM").and_then(surfaces::terminal_app))
+        .or_else(|| named("WT_SESSION").map(|_| "windows-terminal"))
 }
 /// The iTerm session a terminal process runs in, from its environment; none
 /// inside tmux, whose pane iTerm cannot be told to show.
@@ -128,6 +158,43 @@ mod tests {
         assert_eq!(loopback_port("http://127.0.0.1:54321/"), Some(54321));
         assert_eq!(loopback_port("http://localhost:54321"), None);
         assert_eq!(loopback_port("http://127.0.0.1:0"), None);
+    }
+
+    #[test]
+    fn the_app_a_hook_runs_under_names_its_source() {
+        let env = |pairs: &[(&str, &str)]| {
+            pairs
+                .iter()
+                .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+                .collect::<HashMap<_, _>>()
+        };
+        let editor = [Ancestor {
+            bundle: Some("com.todesktop.230313mzl4w4u92.helper".into()),
+            ..Ancestor::default()
+        }];
+        assert_eq!(
+            host_app(
+                &env(&[
+                    ("__CFBundleIdentifier", "com.googlecode.iterm2"),
+                    ("TERM_PROGRAM", "tmux")
+                ]),
+                &editor
+            ),
+            Some("iterm")
+        );
+        assert_eq!(
+            host_app(&env(&[("TERM_PROGRAM", "vscode")]), &editor),
+            Some("cursor")
+        );
+        assert_eq!(
+            host_app(&env(&[("TERM_PROGRAM", "ghostty")]), &[]),
+            Some("ghostty")
+        );
+        assert_eq!(
+            host_app(&env(&[("TERMINAL_EMULATOR", "JetBrains-JediTerm")]), &[]),
+            Some("jetbrains")
+        );
+        assert_eq!(host_app(&env(&[("TERM_PROGRAM", "xterm")]), &[]), None);
     }
 
     #[test]

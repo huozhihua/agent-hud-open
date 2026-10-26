@@ -38,6 +38,9 @@ pub(crate) struct LogHead {
     /// The client that drives the session (`Log::client`).
     #[serde(default)]
     pub client: Option<String>,
+    /// The session's first and latest prompts (`Log::prompts`).
+    #[serde(default)]
+    pub prompts: crate::naming::surfaces::PromptStamps,
     pub updated: String,
     pub usage: Usage,
     pub offset: u64,
@@ -107,6 +110,7 @@ impl LogHead {
             model: log.model.clone(),
             cwd: log.cwd.clone(),
             client: log.client.clone(),
+            prompts: log.prompts.clone(),
             updated: log.updated.clone(),
             usage: log.usage,
             offset: log.offset,
@@ -260,6 +264,15 @@ impl LogHead {
         {
             session["client"] = json!(client);
         }
+        // Where its first and latest prompts were typed, as the log tells;
+        // the presentation adds what hooks and deliveries report.
+        session["origins"] = crate::naming::surfaces::resolve(
+            &self.source,
+            &self.prompts,
+            self.client.as_deref(),
+            &Default::default(),
+        )
+        .json();
         if self.source == "grok-bot" {
             if let Some(id) = self.id.rsplit(':').next() {
                 session["navigationTarget"] = json!({"kind":"grok-bot-agent","id":id})

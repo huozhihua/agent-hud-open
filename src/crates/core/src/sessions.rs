@@ -652,6 +652,7 @@ impl AgentHudCore {
             &mut session,
             metering::date_ms(&log.updated),
             log.client.as_deref(),
+            &log.prompts,
         );
         if let Some(title) = title {
             session["title"] = json!(title);

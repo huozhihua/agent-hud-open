@@ -98,7 +98,7 @@ impl Log {
         }
         let turn = d["turn"].as_i64().map(|n| n.to_string());
         if kind == "turn/start" && !self.live.is_subagent {
-            self.mark(Some(at), crate::transcript::metering::MarkKind::Prompt);
+            self.mark_prompt(Some(at), None);
         }
         if kind == "turn/start" {
             if let Some(turn) = turn.as_deref() {

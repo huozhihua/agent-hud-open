@@ -1227,6 +1227,13 @@ impl LogSession for Log {
         {
             session["client"] = json!(client);
         }
+        session["origins"] = crate::naming::surfaces::resolve(
+            &self.source,
+            &self.prompts,
+            self.client.as_deref(),
+            &Default::default(),
+        )
+        .json();
         if self.source == "antigravity" {
             if let Some(id) = self.id.strip_prefix("antigravity:") {
                 session["navigationTarget"] =

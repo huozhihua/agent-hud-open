@@ -51,7 +51,7 @@ pub(super) fn valid(event: &HookEvent, now: i64) -> bool {
         "attention" => 86_400_000,
         "compaction" => 300_000,
         "completion" | "account" => 30 * 86_400_000,
-        "origin" => i64::MAX,
+        "origin" | "delivery" => i64::MAX,
         _ => return false,
     };
     now.saturating_sub(event.at_ms) < retention
@@ -71,6 +71,42 @@ fn account_lock(directory: &Path) -> Result<fs::File, String> {
     Ok(file)
 }
 
+/// Records that Agent HUD itself sent a session a prompt, or started it, from
+/// `surface` (`mobile:iphone`, `mcp:codex`, `desktop:agenthud`): the session's
+/// tags take it for the prompt that arrives (`naming::surfaces`).
+pub fn record_delivery(
+    data: &Path,
+    source: &str,
+    session: &str,
+    surface: &agent_hud_agents::naming::surfaces::Surface,
+    at_ms: i64,
+) -> Result<(), String> {
+    record_event(
+        data,
+        &HookEvent {
+            source: source.into(),
+            session_id: session.into(),
+            at_ms,
+            kind: "delivery".into(),
+            data: serde_json::json!({"surface":surface.tag()}),
+        },
+    )
+}
+
+/// The first surface a session's origin or delivery record had, which the
+/// record replacing it keeps: only the latest record is kept, and a session's
+/// first prompt was typed where its first record says (`naming::surfaces`).
+fn first_surface(event: &HookEvent, old: &HookEvent) -> Option<serde_json::Value> {
+    if !matches!(event.kind.as_str(), "origin" | "delivery") || !event.data.is_object() {
+        return None;
+    }
+    if old.data["first"].is_object() {
+        return Some(old.data["first"].clone());
+    }
+    let surface = old.data["surface"].as_str()?;
+    Some(serde_json::json!({"surface":surface,"at":old.at_ms}))
+}
+
 /// Only reduced public reporting facts are persisted. Approval payloads never
 /// enter this inbox. A hook can report while the GUI and Runtime are absent.
 pub fn record_event(data: &Path, event: &HookEvent) -> Result<(), String> {
@@ -84,9 +120,20 @@ pub fn record_event(data: &Path, event: &HookEvent) -> Result<(), String> {
         .then(|| account_lock(&directory))
         .transpose()?;
     let path = directory.join(format!("{}.json", key(event)));
-    if read(&path).is_some_and(|(old, _)| old.at_ms > event.at_ms) {
+    let old = read(&path).map(|(old, _)| old);
+    if old.as_ref().is_some_and(|old| old.at_ms > event.at_ms) {
         return Ok(());
     }
+    let carried;
+    let event = match old.as_ref().and_then(|old| first_surface(event, old)) {
+        Some(first) => {
+            let mut next = event.clone();
+            next.data["first"] = first;
+            carried = next;
+            &carried
+        }
+        None => event,
+    };
     let bytes = serde_json::to_vec(event).map_err(|_| "Invalid hook event")?;
     if bytes.len() as u64 > RECORD_LIMIT {
         return Err("Hook event is too large".into());
@@ -271,6 +318,47 @@ mod tests {
     use serde_json::json;
     use std::sync::mpsc;
     use std::time::Duration;
+
+    #[test]
+    fn a_session_record_keeps_its_first_surface() {
+        let root = tempfile::tempdir().unwrap();
+        let data = root.path();
+        let at = now_ms() - 10_000;
+        let origin = |offset: i64, surface: &str| HookEvent {
+            source: "claude".into(),
+            session_id: "s1".into(),
+            kind: "origin".into(),
+            at_ms: at + offset,
+            data: json!({"host":"cli","surface":surface}),
+        };
+        for (offset, surface) in [(0, "cli:iterm"), (5, "cli:ghostty"), (9, "cli:warp")] {
+            record_event(data, &origin(offset, surface)).unwrap();
+        }
+        let path = data
+            .join("hooks/inbox")
+            .join(format!("{}.json", key(&origin(0, ""))));
+        let (kept, _) = read(&path).unwrap();
+        assert_eq!(kept.data["surface"], "cli:warp");
+        assert_eq!(kept.data["first"], json!({"surface":"cli:iterm","at":at}));
+        // An older report changes nothing.
+        record_event(data, &origin(-5, "cli:terminal")).unwrap();
+        assert_eq!(read(&path).unwrap().0.data, kept.data);
+        let surface = agent_hud_agents::naming::surfaces::Surface::parse("mobile:iphone").unwrap();
+        record_delivery(data, "claude", "s1", &surface, at).unwrap();
+        record_delivery(data, "claude", "s1", &surface, at + 1).unwrap();
+        let delivery = HookEvent {
+            kind: "delivery".into(),
+            ..origin(0, "")
+        };
+        let path = data
+            .join("hooks/inbox")
+            .join(format!("{}.json", key(&delivery)));
+        let (kept, _) = read(&path).unwrap();
+        assert_eq!(
+            kept.data["first"],
+            json!({"surface":"mobile:iphone","at":at})
+        );
+    }
 
     #[test]
     fn concurrent_account_callbacks_keep_the_newest_report() {

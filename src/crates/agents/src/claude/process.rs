@@ -119,11 +119,31 @@ pub fn origin(caller: &Caller, session: &str) -> Origin {
         }
         _ => "unsupported",
     };
+    let (category, app) = match entrypoint.filter(|e| !e.is_empty()) {
+        Some(entrypoint) => {
+            let (category, app) = crate::naming::surfaces::client_category("claude", entrypoint);
+            (Some(category), app.and_then(|app| fixed_app(&app)))
+        }
+        None => (None, None),
+    };
     Origin {
         host,
         target,
         interactive: entrypoint == Some("cli") && interactive(&arguments),
         ask_channel: false,
+        category,
+        app,
+    }
+}
+
+/// A source the entrypoint fixes, as a static word. An editor extension's
+/// editor is left to the app it runs under (VS Code, Cursor…).
+fn fixed_app(app: &str) -> Option<&'static str> {
+    match app {
+        "claude" => Some("claude"),
+        "cowork" => Some("cowork"),
+        crate::naming::surfaces::AGENT_HUD => Some(crate::naming::surfaces::AGENT_HUD),
+        _ => None,
     }
 }
 
@@ -218,6 +238,22 @@ mod tests {
         );
         assert_eq!(desktop.host, "desktop");
         assert_eq!(desktop.target, json!({"kind":"claude-desktop","id":"s-1"}));
+        use crate::naming::surfaces::Category;
+        assert_eq!(
+            (desktop.category, desktop.app),
+            (Some(Category::Desktop), Some("claude"))
+        );
+        assert_eq!((cli.category, cli.app), (Some(Category::Cli), None));
+        let (extension, _) = run(
+            &["claude"],
+            &[("CLAUDE_CODE_ENTRYPOINT", "claude-vscode")],
+            &[],
+        );
+        assert_eq!(
+            (extension.category, extension.app),
+            (Some(Category::Ide), None),
+            "the editor is the app it runs under"
+        );
         let (claimed, _) = run(
             &["claude"],
             &[("CLAUDE_CODE_ENTRYPOINT", "claude-desktop")],

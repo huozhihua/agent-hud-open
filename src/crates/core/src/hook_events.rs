@@ -2,6 +2,7 @@
 //! transcript reducer or usage ledger: origins never imply work, attention never
 //! creates an actionable approval, and callbacks never mint token/cost facts.
 use crate::naming::session_title::{self, TitleEvidence};
+use crate::naming::surfaces;
 use agent_hud_agents::{HookEvent, COMPLETION_SOURCES};
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
@@ -21,6 +22,8 @@ pub(crate) struct HookEvidence {
 #[derive(Default)]
 struct Evidence {
     origin: Option<HookEvent>,
+    /// A prompt Agent HUD itself sent the session (`naming::surfaces`).
+    delivery: Option<HookEvent>,
     attention: Option<HookEvent>,
     compaction: Option<HookEvent>,
     completion: Option<HookEvent>,
@@ -153,6 +156,7 @@ impl HookEvidence {
         self.sessions.retain(|_, sessions| {
             sessions.retain(|_, s| {
                 s.origin.is_some()
+                    || s.delivery.is_some()
                     || s.attention.is_some()
                     || s.compaction.is_some()
                     || s.completion.is_some()
@@ -166,8 +170,10 @@ impl HookEvidence {
                 || !event.data.is_object()
                 || event.at_ms > now.saturating_add(FUTURE)
                 // Origin is the latest persistent host observation, not a lease.
-                // Its explicit no-target record must also survive across restarts.
-                || (event.kind != "origin" && !valid(event, now, 30 * DAY))
+                // Its explicit no-target record must also survive across restarts,
+                // and so must a delivery, which names a session's first prompt.
+                || (!matches!(event.kind.as_str(), "origin" | "delivery")
+                    && !valid(event, now, 30 * DAY))
             {
                 continue;
             }
@@ -175,6 +181,7 @@ impl HookEvidence {
             let hooks = agent_hud_agents::hooks::hooks_by_id(&event.source);
             let supported = match event.kind.as_str() {
                 "origin" => hooks.is_some_and(|hooks| hooks.origin.is_some()),
+                "delivery" => agent_hud_agents::by_id(&event.source).is_some(),
                 "session-observation" | "session-forget" => agent_hud_agents::by_id(&event.source)
                     .is_some_and(|agent| agent.observer.is_some()),
                 "attention" => hooks.is_some_and(|hooks| hooks.attention),
@@ -208,6 +215,7 @@ impl HookEvidence {
                 .or_default();
             changed |= match event.kind.as_str() {
                 "origin" => newer(&mut entry.origin, event),
+                "delivery" => newer(&mut entry.delivery, event),
                 "attention" => newer(&mut entry.attention, event),
                 "compaction" => newer(&mut entry.compaction, event),
                 "completion" => newer(&mut entry.completion, event),
@@ -231,6 +239,28 @@ impl HookEvidence {
     }
     pub(crate) fn revision(&self) -> u64 {
         self.revision
+    }
+    /// What a session's hooks and Agent HUD's deliveries say about where its
+    /// prompts were typed: the latest of each, and the first each recorded.
+    pub(crate) fn reports(&self, source: &str, session: &str) -> surfaces::Reports {
+        let Some(entry) = self
+            .sessions
+            .get(source)
+            .and_then(|sessions| sessions.get(session))
+        else {
+            return surfaces::Reports::default();
+        };
+        let report = |event: &Option<HookEvent>, first: bool| {
+            event
+                .as_ref()
+                .and_then(|e| surfaces::Report::from_record(&e.data, e.at_ms, first))
+        };
+        surfaces::Reports {
+            hook: report(&entry.origin, false),
+            first_hook: report(&entry.origin, true),
+            delivery: report(&entry.delivery, false),
+            first_delivery: report(&entry.delivery, true),
+        }
     }
     pub(crate) fn has_evidence(&self, source: &str, session: &str) -> bool {
         self.sessions
@@ -496,6 +526,15 @@ impl HookEvidence {
                 let at = iso(event.at_ms);
                 let mut session = json!({"id":event.session_id,"source":event.source,"title":label,"model":event.data["model"].as_str().unwrap_or("Unknown"),"cwd":cwd,"updatedAt":at,"lastMessageAt":at,"state":"idle","tokens":0,"cost":null,"contextPercent":null,"logPath":null,"parentId":null,"usageStatus":"unavailable","evidence":"completion-hook","liveFacts":{"turnId":event.data["turnId"],"turnStartedAt":null,"outcome":"completed","endedAt":at,"limitedUntil":null,"observedAt":at,"lastEventAt":at,"activity":null,"requests":[]}});
                 self.overlay(&mut session, now, Some(event.at_ms), None);
+                // No log names its prompts: the reports do, else the client's
+                // one interface.
+                let mut origins =
+                    surfaces::from_reports(&self.reports(&event.source, &event.session_id));
+                let only = surfaces::from_log(&event.source, None, None);
+                origins.latest = origins.latest.or_else(|| origins.init.clone());
+                origins.init.get_or_insert_with(|| only.clone());
+                origins.latest.get_or_insert(only);
+                session["origins"] = origins.json();
                 result.push(session);
             }
         }

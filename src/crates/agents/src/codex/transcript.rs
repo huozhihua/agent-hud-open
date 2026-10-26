@@ -137,7 +137,7 @@ impl Log {
             if value["type"] == "compacted" {
                 self.mark(at(), metering::MarkKind::Compaction);
             } else if value["type"] == "event_msg" && payload["type"] == "task_started" {
-                self.mark(at(), metering::MarkKind::Prompt);
+                self.mark_prompt(at(), None);
             }
         }
         match value["type"].as_str() {

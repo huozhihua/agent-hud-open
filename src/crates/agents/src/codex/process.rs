@@ -94,6 +94,7 @@ pub fn origin(caller: &Caller, session: &str) -> Origin {
             }
         }
     }
+    let (category, app) = surface(caller, host);
     Origin {
         host,
         target: if host == "desktop" {
@@ -103,6 +104,59 @@ pub fn origin(caller: &Caller, session: &str) -> Origin {
         },
         interactive: true,
         ask_channel: host == "daemon",
+        category,
+        app,
+    }
+}
+
+/// The kind of interface a Codex prompt was typed into, by the process
+/// that runs it: the desktop app, a terminal CLI (`codex exec` is a
+/// script's), or an app-server another app runs, an editor's extension or
+/// Agent HUD. A daemon serves terminal CLIs.
+fn surface(
+    caller: &Caller,
+    host: &str,
+) -> (
+    Option<crate::naming::surfaces::Category>,
+    Option<&'static str>,
+) {
+    use crate::naming::surfaces::{bundle_app, Category, AGENT_HUD};
+    let runs = |name: &str| {
+        caller.ancestors.first().is_some_and(|process| {
+            process
+                .arguments
+                .iter()
+                .skip(1)
+                .find(|argument| !argument.starts_with('-'))
+                .is_some_and(|argument| argument == name)
+        })
+    };
+    let parent_app = || {
+        caller
+            .ancestors
+            .iter()
+            .skip(1)
+            .find_map(|process| process.bundle.as_deref().and_then(bundle_app))
+    };
+    let managed = caller.ancestors.first().is_some_and(|process| {
+        process
+            .arguments
+            .iter()
+            .any(|argument| argument == "--managed-daemon")
+    });
+    match host {
+        "desktop" => (Some(Category::Desktop), Some("codex")),
+        "cli" if runs("exec") || runs("e") => (Some(Category::Sdk), None),
+        "cli" => (Some(Category::Cli), None),
+        "daemon" if runs("app-server") && !managed => match parent_app() {
+            Some(AGENT_HUD) => (Some(Category::Desktop), Some(AGENT_HUD)),
+            Some("vscode" | "vscodium" | "cursor" | "windsurf" | "zed" | "jetbrains" | "xcode") => {
+                (Some(Category::Ide), None)
+            }
+            _ => (Some(Category::Others), None),
+        },
+        "daemon" => (Some(Category::Cli), None),
+        _ => (None, None),
     }
 }
 
@@ -158,6 +212,39 @@ mod tests {
         assert_eq!((daemon.host, daemon.ask_channel), ("daemon", true));
         let cli = origin_of(&["codex"], None);
         assert_eq!((cli.host, cli.interactive), ("cli", true));
+    }
+
+    #[test]
+    fn the_process_names_the_interface_a_prompt_was_typed_into() {
+        use crate::naming::surfaces::{Category, AGENT_HUD};
+        let surface = |arguments: &[&str], parent: Option<&str>| {
+            let origin = origin_of(arguments, parent);
+            (origin.category, origin.app)
+        };
+        assert_eq!(
+            surface(&["codex", "app-server"], Some(DESKTOP_BUNDLE)),
+            (Some(Category::Desktop), Some("codex"))
+        );
+        assert_eq!(surface(&["codex"], None), (Some(Category::Cli), None));
+        assert_eq!(
+            surface(&["codex", "exec", "fix it"], None),
+            (Some(Category::Sdk), None)
+        );
+        assert_eq!(
+            surface(
+                &["codex", "app-server"],
+                Some("com.microsoft.VSCode.helper")
+            ),
+            (Some(Category::Ide), None)
+        );
+        assert_eq!(
+            surface(&["codex", "app-server"], Some("app.agenthud.mac")),
+            (Some(Category::Desktop), Some(AGENT_HUD))
+        );
+        assert_eq!(
+            surface(&["codex", "app-server", "--managed-daemon"], None),
+            (Some(Category::Cli), None)
+        );
     }
 
     #[test]

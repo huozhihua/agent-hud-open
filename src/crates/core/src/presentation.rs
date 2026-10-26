@@ -1,5 +1,6 @@
 //! Client evidence overlays presentation; it never changes token accounting.
 use super::*;
+use crate::naming::surfaces;
 
 pub(super) struct Presentation<'a> {
     hooks: &'a hook_events::HookEvidence,
@@ -33,8 +34,21 @@ impl Presentation<'_> {
             .is_some_and(|sessions| sessions.contains(id))
     }
     /// `client` is the client the session's log last named (Claude Code's
-    /// `entrypoint`), which decides between a hook origin and a newer log.
-    pub(super) fn overlay(&self, session: &mut Value, own_line: Option<i64>, client: Option<&str>) {
+    /// `entrypoint`), which decides between a hook origin and a newer log;
+    /// `prompts` are the log's first and latest prompts, which hooks and
+    /// deliveries tell where they were typed.
+    pub(super) fn overlay(
+        &self,
+        session: &mut Value,
+        own_line: Option<i64>,
+        client: Option<&str>,
+        prompts: &surfaces::PromptStamps,
+    ) {
+        let source = session["source"].as_str().unwrap_or("").to_owned();
+        let reports = self
+            .hooks
+            .reports(&source, session["id"].as_str().unwrap_or(""));
+        session["origins"] = surfaces::resolve(&source, prompts, client, &reports).json();
         let claude = session["source"].as_str() == Some("claude");
         let desktop = claude
             .then(|| session["id"].as_str())
@@ -154,7 +168,12 @@ impl Presentation<'_> {
     }
     pub(super) fn session(&self, log: &LogHead, child: Option<i64>) -> Value {
         let mut session = log.live_session(self.now, child);
-        self.overlay(&mut session, log.updated_at, log.client.as_deref());
+        self.overlay(
+            &mut session,
+            log.updated_at,
+            log.client.as_deref(),
+            &log.prompts,
+        );
         session
     }
     /// The same evidence overlay as a rendered row, without serializing every

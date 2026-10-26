@@ -5,6 +5,7 @@ pub mod clients;
 pub mod model_names;
 pub mod plans;
 pub mod session_title;
+pub mod surfaces;
 pub mod vendor_windows;
 pub mod window_names;
 

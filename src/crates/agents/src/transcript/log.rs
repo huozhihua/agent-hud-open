@@ -1,6 +1,7 @@
 //! A log as it is read: its session, usage, turns and meter events so far.
 use super::carried_usage;
 use crate::naming::session_title::{self, TitleEvidence};
+use crate::naming::surfaces::PromptStamps;
 use crate::transcript::metering;
 use crate::{number, LiveLog, TimelineBucket, Usage, MAX_TURNS, PARSER_VERSION};
 use chrono::DateTime;
@@ -30,6 +31,10 @@ pub struct Log {
     /// `originator` name (`naming::clients`).
     #[serde(default)]
     pub client: Option<String>,
+    /// The session's first and latest prompts, for where each was typed
+    /// (`naming::surfaces`).
+    #[serde(default)]
+    pub prompts: PromptStamps,
     pub updated: String,
     pub usage: Usage,
     pub messages: HashMap<String, Usage>,
@@ -171,6 +176,7 @@ impl Log {
             naming: TitleEvidence::default(),
             stored_title: None,
             client: None,
+            prompts: PromptStamps::default(),
             id,
             model: "Unknown".into(),
             cwd: None,
@@ -218,6 +224,8 @@ impl Log {
         if !self.live.accepts(&self.source, value) {
             return;
         }
+        self.prompts
+            .begin(self.observed, self.client.as_deref(), self.live.started_at);
         self.live.ingest(&self.source, value);
         // A desktop question asked on this line keeps where the line starts,
         // so a later run reads its words again from there.
@@ -243,6 +251,13 @@ impl Log {
         } else {
             self.parse_source(value);
         }
+    }
+
+    /// Notes a prompt: its mark for the ledger and its stamp for where it was
+    /// typed. `plugin` is the Claude Code plugin that submitted it.
+    pub fn mark_prompt(&mut self, at: Option<i64>, plugin: Option<&str>) {
+        self.prompts.prompt(at, self.client.as_deref(), plugin);
+        self.mark(at, metering::MarkKind::Prompt);
     }
 
     /// Notes a prompt or compaction mark for the ledger.

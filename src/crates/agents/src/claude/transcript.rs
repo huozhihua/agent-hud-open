@@ -206,7 +206,10 @@ impl Log {
             if value["type"] == "system" && value["subtype"] == "compact_boundary" {
                 self.mark(at, metering::MarkKind::Compaction);
             } else if claude_prompt(value) && !interruption(value) {
-                self.mark(at, metering::MarkKind::Prompt);
+                let plugin = (value["origin"]["kind"] == "plugin")
+                    .then(|| value["origin"]["name"].as_str())
+                    .flatten();
+                self.mark_prompt(at, plugin);
             }
         }
         // A response is timed from the newest user line of its chain (a

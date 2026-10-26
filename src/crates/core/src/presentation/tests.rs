@@ -217,3 +217,65 @@ fn another_app_server_clients_codex_thread_opens_in_codex() {
     codex_rollout(home, &cli, "cli", "codex_cli_rs");
     assert_eq!(target(&mut core, &cli), Value::Null);
 }
+
+#[test]
+fn a_session_lists_where_its_first_and_latest_prompts_were_typed() {
+    let temp = tempfile::tempdir().unwrap();
+    let home = temp.path();
+    let mut core = core(home);
+    let id = session_id();
+    let now = Utc::now();
+    let at = |ago_s: i64| now - chrono::Duration::seconds(ago_s);
+    let prompt = |ago_s: i64, entrypoint: &str, text: &str, plugin: bool| {
+        let mut line = json!({"sessionId":id,"timestamp":at(ago_s).to_rfc3339(),"type":"user","entrypoint":entrypoint,
+            "message":{"role":"user","content":text}});
+        if plugin {
+            line["origin"] = json!({"kind":"plugin","name":"agent-hud"});
+        }
+        line.to_string()
+    };
+    let path = home
+        .join(".claude/projects/work")
+        .join(format!("{id}.jsonl"));
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(
+        &path,
+        [
+            prompt(600, "cli", "start in the terminal", false),
+            prompt(10, "cli", "sent from the phone", true),
+        ]
+        .join("\n")
+            + "\n",
+    )
+    .unwrap();
+    let ms = |ago_s: i64| at(ago_s).timestamp_millis();
+    core.ingest_hook_events(vec![
+        // The terminal's hook ran at the session's start; its record keeps
+        // that first surface when the hook runs again for the phone's prompt.
+        HookEvent {
+            data: json!({"hostVerified":true,"host":"cli","navigationTarget":null,"surface":"cli:iterm",
+                "first":{"surface":"cli:iterm","at":ms(620)}}),
+            ..origin(&id, "cli", Value::Null, 0)
+        },
+        HookEvent {
+            source: "claude".into(),
+            session_id: id.clone(),
+            at_ms: ms(40),
+            kind: "delivery".into(),
+            data: json!({"surface":"mobile:iphone"}),
+        },
+    ]);
+    core.read_projection_sources();
+    let snapshot = core.request("snapshot", json!({})).unwrap();
+    let session = snapshot["sessions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|session| session["id"] == id)
+        .cloned()
+        .expect("the session is listed");
+    assert_eq!(
+        session["origins"],
+        json!({"init":"cli:iterm","latest":"mobile:iphone"})
+    );
+}

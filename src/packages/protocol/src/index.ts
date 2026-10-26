@@ -105,6 +105,8 @@ export interface Session {
   cwd: string | null;
   /** From Core: the client that drives the session ("Codex Desktop", "Claude Code IDE extension"). */
   client?: string | null;
+  /** From Core: where the session's first (`init`) and latest prompts were typed, as `category:source` tags ("cli:iterm", "desktop:claude", "mobile:iphone"). Categories: desktop, cli, ide, mobile, mcp, sdk, others; a source nobody can tell is `others`. Null when unknown. */
+  origins?: { init: string | null; latest: string | null };
   /** From Core: the project id, the repository its worktrees share written with ~ ("unassigned" filters match none). */
   project?: string | null;
   startedAt?: string | null;
