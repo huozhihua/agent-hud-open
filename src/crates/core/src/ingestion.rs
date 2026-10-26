@@ -1183,6 +1183,16 @@ impl AgentHudCore {
             .collect()
     }
 
+    /// Every session the logs hold, listed or not: archived, removed and
+    /// internal ones too. A hook's completion for one of them is that
+    /// session's, never a session of its own to present in its place.
+    pub(crate) fn known_sessions(&self) -> HashSet<(String, String)> {
+        self.logs
+            .values()
+            .map(|head| (head.source.clone(), head.id.clone()))
+            .collect()
+    }
+
     pub(crate) fn ensure_usage_projection(&mut self) {
         if self.usage_projection.is_some() {
             return;

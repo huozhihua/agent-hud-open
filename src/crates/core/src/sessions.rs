@@ -325,11 +325,7 @@ impl AgentHudCore {
             })
             .collect::<Vec<_>>();
         let extras = if parent.is_none() && self.hook_events.revision() != 0 {
-            let existing = self
-                .listed_sessions()
-                .iter()
-                .map(|log| (log.source.clone(), log.id.clone()))
-                .collect();
+            let existing = self.known_sessions();
             self.hook_events
                 .extra_sessions(
                     now,
@@ -557,10 +553,7 @@ impl AgentHudCore {
         let logs = self.listed_sessions();
         let selected = logs.iter().copied().find(|log| log.id == id);
         let Some(selected) = selected else {
-            let existing = logs
-                .iter()
-                .map(|log| (log.source.clone(), log.id.clone()))
-                .collect();
+            let existing = self.known_sessions();
             let session = self
                 .hook_events
                 .extra_sessions(now, 30, &existing)

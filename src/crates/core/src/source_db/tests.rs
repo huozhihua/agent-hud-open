@@ -429,3 +429,66 @@ fn cursor_sessions_come_from_its_database_and_their_tokens_from_the_turn_log() {
     assert_eq!(detail["usage"]["total"], 710 + 810);
     assert_eq!(detail["calls"].as_array().unwrap().len(), 2);
 }
+
+#[test]
+fn a_completion_for_an_archived_session_puts_no_placeholder_in_its_place() {
+    use std::fs;
+    let root = tempfile::tempdir().unwrap();
+    let now = chrono::Utc::now().timestamp_millis();
+    let state = root.path().join("state.vscdb");
+    let db = Connection::open(&state).unwrap();
+    db.execute_batch("CREATE TABLE composerHeaders(composerId TEXT PRIMARY KEY, value TEXT)")
+        .unwrap();
+    db.execute(
+        "INSERT INTO composerHeaders VALUES('kept', ?1)",
+        [
+            json!({"name": "Code quality review", "createdAt": now - 60_000,
+                "conversationCheckpointLastUpdatedAt": now - 2_000, "isArchived": true})
+            .to_string(),
+        ],
+    )
+    .unwrap();
+    fs::create_dir_all(root.path().join("clients/cursor")).unwrap();
+    let mut backend = AgentHudCore::new(
+        vec![
+            SourceRoot {
+                path: state,
+                provider: "cursor",
+            },
+            SourceRoot {
+                path: root.path().join("clients/cursor"),
+                provider: "cursor",
+            },
+        ],
+        root.path().join("hud"),
+    );
+    refresh(&mut backend);
+    let completion = |session: &str| agent_hud_agents::HookEvent {
+        source: "cursor".into(),
+        session_id: session.into(),
+        at_ms: now - 1_000,
+        kind: "completion".into(),
+        data: json!({"turnId": format!("{session}-g1"), "model": "grok-4.7", "workspace": "/repo"}),
+    };
+    backend.ingest_hook_events(vec![
+        completion("cursor:kept"),
+        completion("cursor:unknown"),
+    ]);
+    let snapshot = backend.request("snapshot", json!({})).unwrap();
+    let placeholders = |sessions: &Value| {
+        sessions
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|s| s["evidence"] == "completion-hook")
+            .map(|s| s["id"].as_str().unwrap().to_owned())
+            .collect::<Vec<_>>()
+    };
+    // The archived session stays hidden; a session no log knows still shows.
+    assert_eq!(placeholders(&snapshot["sessions"]), ["cursor:unknown"]);
+    let listed = backend.request("sessions", json!({"scope":"all"})).unwrap();
+    assert_eq!(placeholders(&listed["items"]), ["cursor:unknown"]);
+    assert!(backend
+        .request("session_detail", json!({"id":"cursor:kept"}))
+        .is_err());
+}

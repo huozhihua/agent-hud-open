@@ -37,8 +37,6 @@ pub(crate) struct Rendered {
 pub(crate) struct ListedRows {
     /// Each listed session's row with the log it came from.
     rows: Vec<(PathBuf, Value)>,
-    /// Every session the logs list, which hook-only sessions are told from.
-    ids: HashSet<(String, String)>,
 }
 
 impl crate::AgentHudCore {
@@ -395,7 +393,9 @@ impl crate::AgentHudCore {
             })
             .collect::<Vec<_>>();
         if self.hook_events.revision() != 0 {
-            let extras = self.hook_events.extra_sessions(now, 1, &listed.ids);
+            let extras = self
+                .hook_events
+                .extra_sessions(now, 1, &self.known_sessions());
             sessions.extend(extras.into_iter().filter(|value| {
                 self.enabled
                     .get(value["source"].as_str().unwrap_or(""))
@@ -462,11 +462,7 @@ impl crate::AgentHudCore {
                 (log.path.clone(), session)
             })
             .collect();
-        let ids = logs
-            .iter()
-            .map(|log| (log.source.clone(), log.id.clone()))
-            .collect();
-        ListedRows { rows, ids }
+        ListedRows { rows }
     }
 
     /// Every client Agent HUD knows, with what was found of it and its account,
