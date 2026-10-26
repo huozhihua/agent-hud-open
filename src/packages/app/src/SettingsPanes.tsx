@@ -7,6 +7,7 @@ import {
 } from "./settings/AgentPluginsPane";
 import { DisplayPane } from "./settings/DisplayPane";
 import { GeneralPane } from "./settings/GeneralPane";
+import { PricesPane } from "./settings/PricesPane";
 import type { SettingsPaneProps } from "./settings/SettingsPrimitives";
 
 export type { SettingsPaneProps } from "./settings/SettingsPrimitives";
@@ -43,6 +44,7 @@ export default function SettingsPane({
   request?: (method: string, params?: unknown) => Promise<unknown>;
 }) {
   if (page === "general") return <GeneralPane {...settingsProps} />;
+  if (page === "prices") return <PricesPane {...settingsProps} />;
   if (page === "display")
     return ready && selectedId ? (
       <DisplayPane

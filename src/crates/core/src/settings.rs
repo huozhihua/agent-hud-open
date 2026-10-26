@@ -95,7 +95,21 @@ impl crate::AgentHudCore {
         if key == "approvalWaitMinutes" {
             self.requests.set_hold_ms(value.as_u64().unwrap() * 60_000);
         }
+        self.apply_user_prices();
         Ok(())
+    }
+
+    /// Prices calls by what the owner set on the price page; when it changed,
+    /// every log's cost is worked out again, a few at a time, and the rates
+    /// and statistics follow.
+    pub(crate) fn apply_user_prices(&mut self) {
+        if crate::pricing::set_user_prices(crate::pricing::user_prices_from(&self.settings)) {
+            for head in self.logs.values_mut() {
+                head.list_cost_priced = false;
+            }
+            self.meters.view = None;
+            self.statistics.revision = self.statistics.revision.wrapping_add(1);
+        }
     }
 
     fn validate_setting(key: &str, value: &Value) -> Result<(), String> {
@@ -126,6 +140,46 @@ impl crate::AgentHudCore {
                 if value
                     .as_u64()
                     .is_some_and(|v| [1, 3, 5, 10, 30, 60].contains(&v)) => {}
+            // The price page: the owner's prices per million tokens by model,
+            // multipliers by relay host, and what a local host is.
+            "customPrices"
+                if value.as_object().is_some_and(|prices| {
+                    prices.len() <= 500
+                        && prices.iter().all(|(model, price)| {
+                            let rate = |key: &str| {
+                                price[key].is_null()
+                                    || price[key]
+                                        .as_f64()
+                                        .is_some_and(|v| v.is_finite() && v >= 0.0)
+                            };
+                            !model.is_empty()
+                                && model.len() <= 300
+                                && matches!(price["currency"].as_str(), Some("USD" | "CNY"))
+                                && ["input", "output", "cacheRead", "cacheWrite"]
+                                    .into_iter()
+                                    .all(rate)
+                        })
+                }) => {}
+            "relayMultipliers"
+                if value.as_object().is_some_and(|hosts| {
+                    hosts.len() <= 64
+                        && hosts.iter().all(|(host, times)| {
+                            !host.is_empty()
+                                && host.len() <= 260
+                                && times
+                                    .as_f64()
+                                    .is_some_and(|v| v.is_finite() && v > 0.0 && v <= 100.0)
+                        })
+                }) => {}
+            "localKinds"
+                if value.as_object().is_some_and(|hosts| {
+                    hosts.len() <= 64
+                        && hosts.iter().all(|(host, kind)| {
+                            !host.is_empty()
+                                && host.len() <= 260
+                                && matches!(kind.as_str(), Some("model" | "gateway"))
+                        })
+                }) => {}
             // The relay addresses whose balance may be read with the key the
             // client already sends them (agents `relays::CONSENT`).
             "relayReading"
@@ -165,6 +219,7 @@ impl crate::AgentHudCore {
                 .unwrap_or(10)
                 * 60_000,
         );
+        self.apply_user_prices();
         let enabled = serde_json::from_value(stored["providers"].clone())
             .map_err(|e| format!("Provider preferences could not be read: {e}"))?;
         if self.enabled != enabled {

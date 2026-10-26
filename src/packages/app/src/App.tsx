@@ -16,6 +16,7 @@ import { emit } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import {
   CircleHelp,
+  Coins,
   Download,
   Monitor,
   MoreHorizontal,
@@ -136,6 +137,14 @@ const pages = [
       "What Agent HUD adds to your coding agents. Everything here works on this Mac.",
   },
   {
+    id: "prices",
+    label: "Prices",
+    icon: Coins,
+    color: "#34c759",
+    description:
+      "What each model costs and where the price comes from. Set your own when it is wrong.",
+  },
+  {
     id: "display",
     label: "Display",
     icon: Monitor,
@@ -157,6 +166,7 @@ const chinesePages: Record<string, [string, string]> = {
     "智能体插件",
     "Agent HUD 为编程智能体添加的功能，都在这台 Mac 上运行。",
   ],
+  prices: ["价格", "每个模型按什么价格算、价格从哪里来，不对时可以自己改。"],
   display: ["显示", "自定义灵动岛光晕与面板内容，更改自动生效。"],
   updates: ["更新", "管理 Agent HUD 更新与 Beta 参与设置。"],
 };
@@ -807,6 +817,7 @@ function AppContent({
                         .find((item) => item.id === page)
                         ?.render({ snapshot, request: extensionRequest })}
                       {(page === "general" ||
+                        page === "prices" ||
                         page === "display" ||
                         page === "agents" ||
                         page === "agent-plugins") && (

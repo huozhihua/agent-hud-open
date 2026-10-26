@@ -8,7 +8,9 @@
 use chrono::{Datelike, FixedOffset, TimeZone, Timelike};
 use serde::Deserialize;
 use std::collections::HashMap;
-use std::sync::{OnceLock, RwLock};
+#[cfg(not(test))]
+use std::sync::Mutex;
+use std::sync::OnceLock;
 
 mod regions;
 pub use regions::PriceRegions;
@@ -269,20 +271,13 @@ pub fn is_local_route(route: &str) -> bool {
     )
 }
 
-/// Whether `consumer` (`<client>-model:<model>#<route>`) runs on a local route.
-fn local(consumer: &str) -> bool {
-    consumer
-        .split_once('#')
-        .is_some_and(|(_, route)| is_local_route(route))
-}
-
-/// The route a Claude Code call to `model` is recorded under, from where its
+/// The route a Claude Code session's calls are recorded under, from where its
 /// session's hook said its calls go (`database::endpoints`): None for
 /// Anthropic's or another vendor's own API, whose models are priced by name;
 /// the cloud platform; the relay's host; a local model server's kind, which is
-/// free; and for a local address no server was found at, its host when the
-/// model has a list price (a gateway to a paid API), else `local`.
-pub(crate) fn claude_route(endpoint: &serde_json::Value, model: &str) -> Option<String> {
+/// free; and for a local address no server was found at, its host, which
+/// pricing tells a gateway from a model server by (`quote`).
+pub(crate) fn claude_route(endpoint: &serde_json::Value) -> Option<String> {
     use agent_hud_agents::endpoints::{host_kind, HostKind};
     if let Some(platform) = endpoint["platform"].as_str() {
         return Some(platform.to_owned());
@@ -293,8 +288,7 @@ pub(crate) fn claude_route(endpoint: &serde_json::Value, model: &str) -> Option<
         HostKind::Relay => Some(host.to_owned()),
         HostKind::Local => match endpoint["server"].as_str() {
             Some(server) if is_local_route(server) => Some(server.to_owned()),
-            _ if listed(&format!("claude-model:{model}")).is_some() => Some(host.to_owned()),
-            _ => Some("local".into()),
+            _ => Some(host.to_owned()),
         },
     }
 }
@@ -307,38 +301,54 @@ pub struct RoutePrices {
     pub models: HashMap<String, [i128; 4]>,
 }
 
-fn route_prices() -> &'static RwLock<HashMap<String, RoutePrices>> {
-    static PRICES: OnceLock<RwLock<HashMap<String, RoutePrices>>> = OnceLock::new();
-    PRICES.get_or_init(Default::default)
+/// The prices that come from outside the catalog: the relays' lists and
+/// what the owner set.
+#[derive(Default)]
+struct Overrides {
+    routes: HashMap<String, RoutePrices>,
+    user: UserPrices,
+}
+
+/// The overrides, shared by the whole engine.
+#[cfg(not(test))]
+fn overrides<R>(read: impl FnOnce(&mut Overrides) -> R) -> R {
+    static STATE: OnceLock<Mutex<Overrides>> = OnceLock::new();
+    let mut state = STATE
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    read(&mut state)
+}
+
+/// The overrides of one test, so tests running side by side keep their own.
+#[cfg(test)]
+fn overrides<R>(read: impl FnOnce(&mut Overrides) -> R) -> R {
+    thread_local! {
+        static STATE: std::cell::RefCell<Overrides> = Default::default();
+    }
+    STATE.with(|state| read(&mut state.borrow_mut()))
 }
 
 /// Replaces the relays' prices, by route (the relay's host); true when they
 /// changed.
 pub(crate) fn set_route_prices(prices: HashMap<String, RoutePrices>) -> bool {
-    let Ok(mut held) = route_prices().write() else {
-        return false;
-    };
-    let changed = *held != prices;
-    *held = prices;
-    changed
+    overrides(|held| {
+        let changed = held.routes != prices;
+        held.routes = prices;
+        changed
+    })
 }
 
-/// What `consumer`'s model costs on its relay route, when the relay lists
-/// it: by its exact name, else by the same name without a date.
-fn route_rates(consumer: &str) -> Option<(String, [i128; 4])> {
-    let (rest, route) = consumer.split_once('#')?;
-    let model = rest.split_once("-model:").map_or(rest, |(_, model)| model);
-    let all = route_prices().read().ok()?;
-    let prices = all.get(route)?;
-    let rates = prices.models.get(model).or_else(|| {
+/// What `models` lists for `model`: by its exact name, else by the same name
+/// without a date.
+fn listed_rates<'a, T>(models: &'a HashMap<String, T>, model: &str) -> Option<&'a T> {
+    models.get(model).or_else(|| {
         let name = normalized_model_name(model)?;
-        prices
-            .models
+        models
             .iter()
             .find(|(listed, _)| normalized_model_name(listed).as_deref() == Some(name.as_str()))
             .map(|(_, rates)| rates)
-    })?;
-    Some((prices.currency.clone(), *rates))
+    })
 }
 
 /// What `tokens` cost at a relay's `rates`.
@@ -353,9 +363,211 @@ fn route_cost(currency: &str, rates: [i128; 4], tokens: &PriceTokens) -> ModelCo
     )
 }
 
-/// What a local call costs: nothing, in US dollars.
-fn free() -> ModelCost {
-    ModelCost::new(Region::International.currency(), 0)
+/// What the owner set on the price page (docs/proposals/no-plan-usage.md §3).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct UserPrices {
+    /// By model as recorded (`<model>` for every route, `<model>#<route>` for
+    /// one): its currency and per-token pico rates (input, output, cache
+    /// read, cache write).
+    pub custom: HashMap<String, (String, [i128; 4])>,
+    /// By relay host: how many times the vendor's list price a call costs.
+    pub multipliers: HashMap<String, f64>,
+    /// By host on this computer or its network: true for a model server,
+    /// whose calls are free; false for a gateway to a paid API.
+    pub local_kinds: HashMap<String, bool>,
+}
+
+/// Replaces what the owner set; true when it changed.
+pub(crate) fn set_user_prices(prices: UserPrices) -> bool {
+    overrides(|held| {
+        let changed = held.user != prices;
+        held.user = prices;
+        changed
+    })
+}
+
+/// The owner's settings as prices: `customPrices` (per million tokens, an
+/// empty cache rate taking the input's), `relayMultipliers`, `localKinds`.
+pub(crate) fn user_prices_from(settings: &serde_json::Value) -> UserPrices {
+    let mut prices = UserPrices::default();
+    for (model, price) in settings["customPrices"].as_object().into_iter().flatten() {
+        let currency = match price["currency"].as_str() {
+            Some(currency @ ("USD" | "CNY")) => currency,
+            _ => continue,
+        };
+        let rate = |key: &str| price[key].as_f64().filter(|v| v.is_finite() && *v >= 0.0);
+        let (Some(input), Some(output)) = (rate("input"), rate("output")) else {
+            continue;
+        };
+        let pico = |per_million: f64| (per_million * 1e6).round() as i128;
+        let rates = [
+            pico(input),
+            pico(output),
+            pico(rate("cacheRead").unwrap_or(input)),
+            pico(rate("cacheWrite").unwrap_or(input)),
+        ];
+        prices
+            .custom
+            .insert(model.clone(), (currency.to_owned(), rates));
+    }
+    for (host, times) in settings["relayMultipliers"]
+        .as_object()
+        .into_iter()
+        .flatten()
+    {
+        if let Some(times) = times.as_f64().filter(|v| v.is_finite() && *v > 0.0) {
+            prices.multipliers.insert(host.clone(), times);
+        }
+    }
+    for (host, kind) in settings["localKinds"].as_object().into_iter().flatten() {
+        match kind.as_str() {
+            Some("model") => prices.local_kinds.insert(host.clone(), true),
+            Some("gateway") => prices.local_kinds.insert(host.clone(), false),
+            _ => None,
+        };
+    }
+    prices
+}
+
+/// Where a call's price comes from, in the order it is looked for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Origin {
+    /// The owner's own price for the model.
+    Custom,
+    /// A model on this computer or its network: free.
+    Local,
+    /// The relay's own price list.
+    Relay,
+    /// The vendor's list price times the owner's multiplier for the relay.
+    Multiplier,
+    /// The vendor's list price, through its own API or plan.
+    Catalog,
+}
+
+impl Origin {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Custom => "custom",
+            Self::Local => "local",
+            Self::Relay => "relay",
+            Self::Multiplier => "multiplier",
+            Self::Catalog => "catalog",
+        }
+    }
+}
+
+/// How a call is priced: flat per-token rates in a currency, or a catalog
+/// listing (tiers, peak hours) times a multiplier.
+enum Quote {
+    Flat(String, [i128; 4]),
+    Listed(Listing, f64),
+}
+
+/// How `consumer` (`<client>-model:<model>[#<route>]`) is priced on `region`,
+/// and where the price comes from: the owner's price for the model on that
+/// route, then for the model on any route; free on a local route (a named
+/// model server, or a local host the owner calls a model server, or by
+/// default one whose model has no list price); the relay's own list; the
+/// owner's multiplier on the vendor's list; the vendor's list through its own
+/// service. None when nothing prices it.
+fn quote(consumer: &str, region: Region) -> Option<(Origin, Quote)> {
+    use agent_hud_agents::endpoints::{host_kind, HostKind};
+    let (base, route) = consumer
+        .split_once('#')
+        .map_or((consumer, None), |(base, route)| (base, Some(route)));
+    let model = consumer
+        .split_once("-model:")
+        .map_or(consumer, |(_, model)| model);
+    let bare = base.split_once("-model:").map_or(base, |(_, model)| model);
+    // What the overrides say, read at once.
+    let (custom, local_kind, relay, multiplier) = overrides(|held| {
+        let user = &held.user;
+        let custom = |name: &str| {
+            user.custom.get(name).cloned().or_else(|| {
+                let normalized = normalized_model_name(name)?;
+                let route = name.split_once('#').map(|(_, route)| route);
+                user.custom
+                    .iter()
+                    .find(|(listed, _)| {
+                        listed.split_once('#').map(|(_, route)| route) == route
+                            && normalized_model_name(listed).as_deref() == Some(normalized.as_str())
+                    })
+                    .map(|(_, price)| price.clone())
+            })
+        };
+        let custom = custom(model).or_else(|| route.and_then(|_| custom(bare)));
+        let route = route.unwrap_or("");
+        let relay = held.routes.get(route).and_then(|prices| {
+            listed_rates(&prices.models, bare).map(|rates| (prices.currency.clone(), *rates))
+        });
+        (
+            custom,
+            user.local_kinds.get(route).copied(),
+            relay,
+            user.multipliers.get(route).copied(),
+        )
+    });
+    if let Some((currency, rates)) = custom {
+        return Some((Origin::Custom, Quote::Flat(currency, rates)));
+    }
+    if let Some(route) = route {
+        let local = is_local_route(route)
+            || (host_kind(route) == HostKind::Local
+                && local_kind.unwrap_or_else(|| listed(base).is_none()));
+        if local {
+            return Some((
+                Origin::Local,
+                Quote::Flat(Region::International.currency().into(), [0; 4]),
+            ));
+        }
+        if let Some((currency, rates)) = relay {
+            return Some((Origin::Relay, Quote::Flat(currency, rates)));
+        }
+        if let Some(times) = multiplier {
+            return Some((
+                Origin::Multiplier,
+                Quote::Listed(listing(base, region)?, times),
+            ));
+        }
+    }
+    Some((
+        Origin::Catalog,
+        Quote::Listed(listing(consumer, region)?, 1.0),
+    ))
+}
+
+/// `amount` times the owner's multiplier.
+fn scaled(amount: i128, times: f64) -> i128 {
+    if times == 1.0 {
+        amount
+    } else {
+        (amount as f64 * times).round() as i128
+    }
+}
+
+/// What a model costs per million tokens and where the price comes from, as
+/// the price page shows it: input, output, cache read and cache write, at the
+/// base rates (no prompt tier, off peak).
+pub(crate) fn price_quote(consumer: &str) -> Option<(Origin, String, [f64; 4])> {
+    let per_million = |pico: i128| pico as f64 / 1e6;
+    let (origin, quote) = quote(consumer, Region::International)?;
+    Some(match quote {
+        Quote::Flat(currency, rates) => (origin, currency, rates.map(per_million)),
+        Quote::Listed(listing, times) => {
+            let rates = &listing.price.rates;
+            let rate = |value: u64| per_million(scaled(value as i128, times));
+            (
+                origin,
+                listing.region.currency().to_owned(),
+                [
+                    rate(rates.input),
+                    rate(rates.output),
+                    rate(rates.cache_read),
+                    rate(rates.cache_write),
+                ],
+            )
+        }
+    })
 }
 
 #[derive(Clone, Copy)]
@@ -416,12 +628,12 @@ pub(crate) fn cost_at(
 /// each higher tier of the international list; None when it has no list price.
 /// A call is in the last tier whose start its prompt reaches.
 pub(crate) fn tier_starts(source: &str, model: &str) -> Option<Vec<u64>> {
-    let consumer = format!("{source}-model:{model}");
-    if local(&consumer) || route_rates(&consumer).is_some() {
-        return Some(Vec::new());
+    match quote(&format!("{source}-model:{model}"), Region::International)?.1 {
+        Quote::Flat(..) => Some(Vec::new()),
+        Quote::Listed(listing, _) => {
+            Some(listing.price.tiers.iter().map(|tier| tier.from).collect())
+        }
     }
-    let listing = listing(&consumer, Region::International)?;
-    Some(listing.price.tiers.iter().map(|tier| tier.from).collect())
 }
 
 /// The tier a call whose prompt (fresh input, cache writes and cache reads)
@@ -470,16 +682,16 @@ pub(crate) fn cost_in_tier(
     tokens: &PriceTokens,
     tier: Option<usize>,
 ) -> Option<ModelCost> {
-    let consumer = format!("{source}-model:{model}");
-    if local(&consumer) {
-        return Some(free());
+    match quote(&format!("{source}-model:{model}"), Region::International)?.1 {
+        Quote::Flat(currency, rates) => Some(route_cost(&currency, rates, tokens)),
+        Quote::Listed(listing, times) => {
+            let amount = listing.price.rates(tier).amount(KindTokens::from(tokens))?;
+            Some(ModelCost::new(
+                listing.region.currency(),
+                scaled(amount, times),
+            ))
+        }
     }
-    if let Some((currency, rates)) = route_rates(&consumer) {
-        return Some(route_cost(&currency, rates, tokens));
-    }
-    let listing = listing(&consumer, Region::International)?;
-    let amount = listing.price.rates(tier).amount(KindTokens::from(tokens))?;
-    Some(ModelCost::new(listing.region.currency(), amount))
 }
 
 pub fn consumer_cost(
@@ -489,13 +701,10 @@ pub fn consumer_cost(
     region: Region,
     at_ms: Option<i64>,
 ) -> Option<ModelCost> {
-    if local(consumer) {
-        return Some(free());
-    }
-    if let Some((currency, rates)) = route_rates(consumer) {
-        return Some(route_cost(&currency, rates, tokens));
-    }
-    let listing = listing(consumer, region)?;
+    let (listing, times) = match quote(consumer, region)?.1 {
+        Quote::Flat(currency, rates) => return Some(route_cost(&currency, rates, tokens)),
+        Quote::Listed(listing, times) => (listing, times),
+    };
     let kinds = KindTokens::from(tokens);
     let tier = tiered.then(|| listing.price.tier(kinds)).flatten();
     let amount = listing
@@ -503,7 +712,10 @@ pub fn consumer_cost(
         .rates(tier)
         .amount(kinds)?
         .checked_mul(factor(listing.model, at_ms))?;
-    Some(ModelCost::new(listing.region.currency(), amount))
+    Some(ModelCost::new(
+        listing.region.currency(),
+        scaled(amount, times),
+    ))
 }
 
 #[cfg(test)]
@@ -594,6 +806,95 @@ mod tests {
             ),
             None
         );
+    }
+
+    #[test]
+    fn the_owners_prices_come_first_then_local_relay_multiplier_and_catalog() {
+        let tokens = PriceTokens {
+            tokens_in: 1_000_000,
+            tokens_out: 0,
+            cache_read: 0,
+            cache_write: 0,
+            reasoning: 0,
+        };
+        let catalog = cost("codex", "gpt-6-sol", &tokens).unwrap();
+        let origin = |consumer: &str| price_quote(consumer).map(|(origin, _, _)| origin);
+        set_user_prices(user_prices_from(&serde_json::json!({
+            "customPrices": {
+                "qwen3-coder:30b": {"currency": "CNY", "input": 1.0, "output": 4.0, "cacheRead": null, "cacheWrite": null},
+                "gpt-6-sol#relay.example.com": {"currency": "USD", "input": 0.5, "output": 2.0},
+                "broken": {"currency": "EUR", "input": 1.0, "output": 1.0}
+            },
+            "relayMultipliers": {"cheap.example.com": 0.3},
+            "localKinds": {"localhost:4000": "model", "localhost:5000": "gateway"}
+        })));
+        // The owner's price, for one route and for every route.
+        assert_eq!(
+            cost("codex", "gpt-6-sol#relay.example.com", &tokens),
+            Some(500_000_000_000)
+        );
+        assert_eq!(
+            origin("codex-model:gpt-6-sol#relay.example.com"),
+            Some(Origin::Custom)
+        );
+        let custom = cost_at(
+            "claude",
+            "qwen3-coder:30b#relay.example.com",
+            &tokens,
+            true,
+            Region::International,
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            (custom.currency.as_str(), custom.amount_pico),
+            ("CNY", 1_000_000_000_000)
+        );
+        assert_eq!(
+            price_quote("claude-model:qwen3-coder:30b").map(|(_, _, rates)| rates),
+            Some([1.0, 4.0, 1.0, 1.0]),
+            "an empty cache rate takes the input's"
+        );
+        // A multiplier on the vendor's list.
+        assert_eq!(
+            cost("codex", "gpt-6-sol#cheap.example.com", &tokens),
+            Some((catalog as f64 * 0.3).round() as i128)
+        );
+        assert_eq!(
+            origin("codex-model:gpt-6-sol#cheap.example.com"),
+            Some(Origin::Multiplier)
+        );
+        // A local host: as the owner says, else a listed model goes through a gateway.
+        assert_eq!(
+            cost("claude", "claude-sonnet-4-5#localhost:4000", &tokens),
+            Some(0)
+        );
+        assert_eq!(
+            cost("claude", "claude-sonnet-4-5#localhost:5000", &tokens),
+            None
+        );
+        assert_eq!(
+            cost("claude", "claude-sonnet-4-5#localhost:6000", &tokens),
+            None,
+            "a gateway by default"
+        );
+        assert_eq!(
+            cost("claude", "mystery-model#localhost:6000", &tokens),
+            Some(0),
+            "a model server by default"
+        );
+        assert_eq!(
+            origin("claude-model:mystery-model#localhost:6000"),
+            Some(Origin::Local)
+        );
+        assert_eq!(origin("codex-model:gpt-6-sol"), Some(Origin::Catalog));
+        assert_eq!(
+            cost("codex", "gpt-6-sol#other.example.com", &tokens),
+            None,
+            "a relay with nothing set"
+        );
+        set_user_prices(UserPrices::default());
+        assert_eq!(cost("codex", "gpt-6-sol#relay.example.com", &tokens), None);
     }
 
     #[test]

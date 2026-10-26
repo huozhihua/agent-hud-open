@@ -130,9 +130,9 @@ fn a_claude_call_is_recorded_under_the_route_its_session_reported() {
         ),
         [
             ("claude-sonnet-4-5#localhost:4000".into(), None),
-            ("qwen3-coder:30b#local".into(), None)
+            ("qwen3-coder:30b#localhost:4000".into(), None)
         ],
-        "no server found: a priced model goes through a gateway, any other runs here"
+        "no server found: the host, which pricing reads"
     );
 }
 

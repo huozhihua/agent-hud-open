@@ -500,6 +500,12 @@ export interface AppSettings {
   readCopilotQuota?: boolean;
   /** The relay hosts whose balance may be read with the key the client already sends them. */
   relayReading?: string[];
+  /** The owner's prices per million tokens, by model as recorded (`model` or `model#route`). */
+  customPrices?: Record<string, CustomPrice>;
+  /** By relay host: times the vendor's list price, when the relay has no price list. */
+  relayMultipliers?: Record<string, number>;
+  /** By local host: a model server (free) or a gateway to a paid API. */
+  localKinds?: Record<string, "model" | "gateway">;
   approvalWaitMinutes?: ApprovalWaitMinutes;
   launchAtLogin: boolean;
   appearanceFollowsScreen?: boolean;
@@ -601,6 +607,43 @@ export interface Snapshot {
   billing: BillingAccount[];
   /** From Core: the relays the clients are configured with, for consent in Settings. */
   relays?: RelaySource[];
+}
+/** A price per million tokens; an empty cache rate takes the input's. */
+export interface CustomPrice {
+  currency: "USD" | "CNY";
+  input: number;
+  output: number;
+  cacheRead: number | null;
+  cacheWrite: number | null;
+}
+/** One model used in the last 30 days, on the price page. */
+export interface PriceRow {
+  id: string;
+  source: string;
+  client: string;
+  /** The model as recorded, with its route: the key of its custom price. */
+  model: string;
+  name: string;
+  route: string | null;
+  routeKind: "local-server" | "cloud" | "relay" | "local" | "provider" | null;
+  tokens: number;
+  /** Per million tokens at the base rates; null when nothing prices it. */
+  price: {
+    origin: "custom" | "local" | "relay" | "multiplier" | "catalog";
+    currency: string;
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheWrite: number;
+  } | null;
+  custom: CustomPrice | null;
+}
+/** From Core (`price_list`): the price page. */
+export interface PriceList {
+  kind: "prices";
+  models: PriceRow[];
+  relays: { host: string; multiplier: number | null; listed: boolean }[];
+  localHosts: { host: string; kind: "model" | "gateway" | null }[];
 }
 /** A relay a client is configured with (Claude Code's settings env, Codex's providers). */
 export interface RelaySource {
@@ -849,6 +892,7 @@ export interface SessionsResponse {
 }
 export type NativeMethod =
   | "snapshot"
+  | "price_list"
   | "statistics"
   | "sessions"
   | "refresh"

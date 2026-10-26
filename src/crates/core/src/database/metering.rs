@@ -1354,6 +1354,18 @@ impl View {
         self.loaded_at = now;
     }
 
+    /// The models the selected logs' calls used since `since`, by client
+    /// source and model as recorded, with their tokens.
+    pub fn models_since(&self, since: i64) -> BTreeMap<(String, String), u64> {
+        let mut models = BTreeMap::<(String, String), u64>::new();
+        for bucket in self.buckets.iter().filter(|bucket| bucket.at >= since) {
+            *models
+                .entry((bucket.source.clone(), bucket.model.clone()))
+                .or_default() += bucket.usage.total();
+        }
+        models
+    }
+
     /// Each client's calls in the 24 hours before `now`, by the client's
     /// source id: their tokens and what they cost at list prices, from the
     /// selected logs' buckets already in memory.

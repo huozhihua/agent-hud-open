@@ -253,7 +253,7 @@ impl crate::AgentHudCore {
 
     /// Brings the meter view, the quota samples and the balance metrics up to
     /// date with the ledger, and returns the time the snapshot is read at.
-    fn prepare_meters(&mut self) -> Result<i64, String> {
+    pub(crate) fn prepare_meters(&mut self) -> Result<i64, String> {
         if !self.accounts.billing.is_empty() {
             if let Some(db) = &self.database {
                 // Billed events are DeepSeek's (metering writes each event with

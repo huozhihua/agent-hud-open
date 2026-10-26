@@ -29,6 +29,7 @@ mod island_events;
 mod legacy;
 mod log_files;
 mod presentation;
+mod prices;
 mod pricing;
 pub mod projects;
 pub mod replies;
@@ -161,7 +162,7 @@ impl AgentHudCore {
             .ok()
             .and_then(|bytes| serde_json::from_slice(&bytes).ok())
             .unwrap_or(Value::Null);
-        let mut settings = json!({"quotaDisplay":"consumed","codexHomes":[],"antigravityCliSettings":[],"appearance":"system","appearanceFollowsScreen":false,"language":"system","clientHooks":false,"readCopilotQuota":false,"approvalWaitMinutes":10,"launchAtLogin":true,"animations":true,"hudVisible":true,"showMenuBarIcon":true,"hudTools":false,"claudeAnswers":true,"relayReading":[]});
+        let mut settings = json!({"quotaDisplay":"consumed","codexHomes":[],"antigravityCliSettings":[],"appearance":"system","appearanceFollowsScreen":false,"language":"system","clientHooks":false,"readCopilotQuota":false,"approvalWaitMinutes":10,"launchAtLogin":true,"animations":true,"hudVisible":true,"showMenuBarIcon":true,"hudTools":false,"claudeAnswers":true,"relayReading":[],"customPrices":{},"relayMultipliers":{},"localKinds":{}});
         if let Some(values) = stored["settings"].as_object() {
             for (key, value) in values {
                 if settings.get(key).is_some() {
@@ -451,6 +452,7 @@ impl AgentHudCore {
                 self.snapshot()
             }
             "statistics" => self.statistics(params),
+            "price_list" => self.price_list(),
             "usage_buckets" => self.usage_buckets(params),
             "set_setting" => {
                 let key = params["key"].as_str().ok_or("Setting key is required")?;

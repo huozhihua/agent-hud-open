@@ -38,16 +38,16 @@ const VENDOR_HOSTS: &[&str] = &[
 
 /// The route a call through `provider` at `base_url` is recorded under, for a
 /// client that names both (Hermes): none for a vendor's own API, whose models
-/// are priced by name; `local` on this computer or its network; else the
-/// provider (or, for a provider called `custom`, the host). None when neither
-/// is known.
+/// are priced by name; the host on this computer or its network, which
+/// pricing tells a gateway from a model server by; else the provider (or, for
+/// a provider called `custom`, the host). None when neither is known.
 pub fn provider_route(provider: Option<&str>, base_url: Option<&str>) -> Option<String> {
     let provider = provider
         .map(|provider| provider.trim().to_ascii_lowercase())
         .filter(|provider| !provider.is_empty());
     let host = base_url.and_then(base_url_host);
     match host.as_deref().map(host_kind) {
-        Some(HostKind::Local) => Some("local".into()),
+        Some(HostKind::Local) => host,
         Some(HostKind::Official | HostKind::Vendor) => None,
         _ => match provider {
             Some(provider) if provider == "custom" => host.or(Some(provider)),
@@ -154,7 +154,7 @@ mod tests {
         );
         assert_eq!(
             route(Some("lmstudio"), Some("http://localhost:1234/v1")),
-            Some("local".into())
+            Some("localhost:1234".into())
         );
         assert_eq!(route(Some("nous"), None), Some("nous".into()));
         assert_eq!(route(None, None), None);

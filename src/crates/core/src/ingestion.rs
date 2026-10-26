@@ -192,18 +192,16 @@ pub(crate) fn route_claude_calls(
             endpoint = crate::database::endpoints::find(db, "claude", parent)?;
         }
     }
-    let Some(endpoint) = endpoint else {
+    let Some(route) = endpoint.as_ref().and_then(crate::pricing::claude_route) else {
         return Ok(());
     };
+    let window = endpoint
+        .as_ref()
+        .and_then(|endpoint| endpoint["contextWindow"].as_u64())
+        .filter(|_| crate::pricing::is_local_route(&route));
     for event in events.iter_mut().filter(|event| !event.model.contains('#')) {
-        if let Some(route) = crate::pricing::claude_route(&endpoint, &event.model) {
-            if crate::pricing::is_local_route(&route) {
-                event.context_window = event
-                    .context_window
-                    .or_else(|| endpoint["contextWindow"].as_u64());
-            }
-            event.model = format!("{}#{route}", event.model);
-        }
+        event.context_window = event.context_window.or(window);
+        event.model = format!("{}#{route}", event.model);
     }
     Ok(())
 }

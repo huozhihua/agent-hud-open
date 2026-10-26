@@ -4,6 +4,7 @@ const methods = new Set([
   "snapshot",
   "refresh",
   "statistics",
+  "price_list",
   "sessions",
   "set_setting",
   "antigravity_cli_status",
