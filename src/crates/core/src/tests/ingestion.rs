@@ -17,6 +17,46 @@ fn codex_cumulative_repeats_and_counter_resets_follow_source_calls() {
 }
 
 #[test]
+fn a_codex_call_carries_its_provider_as_its_route_unless_it_is_openai() {
+    let meta = |provider: Option<&str>| {
+        let mut payload = json!({"id": "s1", "cwd": "/w"});
+        if let Some(provider) = provider {
+            payload["model_provider"] = json!(provider);
+        }
+        json!({"timestamp": "2026-10-19T00:00:00Z", "type": "session_meta", "payload": payload})
+    };
+    let context = json!({"timestamp":"2026-10-19T00:00:01Z","type":"turn_context","payload":{"model":"gpt-6-sol"}});
+    let count = json!({"timestamp":"2026-10-19T00:00:02Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"output_tokens":20}}}});
+    for (provider, model) in [
+        (None, "gpt-6-sol"),
+        (Some("openai"), "gpt-6-sol"),
+        (Some("myrelay"), "gpt-6-sol#myrelay"),
+        (Some("ollama"), "gpt-6-sol#ollama"),
+    ] {
+        let mut log = Log::new("session.jsonl".into(), "codex");
+        assert!(!log.codex_provider_known());
+        log.parse(&meta(provider));
+        assert!(log.codex_provider_known());
+        log.parse(&context);
+        log.parse(&count);
+        let models: Vec<_> = log.meter_events.values().map(|e| e.model.clone()).collect();
+        assert_eq!(models, [model], "{provider:?}");
+    }
+    // A forked rollout's copied parent meta does not change its provider.
+    let mut log = Log::new("session.jsonl".into(), "codex");
+    log.parse(&meta(Some("myrelay")));
+    let mut parent = meta(Some("openai"));
+    parent["payload"]["id"] = json!("parent");
+    log.note_codex_provider(&parent);
+    log.parse(&context);
+    log.parse(&count);
+    assert_eq!(
+        log.meter_events.values().next().unwrap().model,
+        "gpt-6-sol#myrelay"
+    );
+}
+
+#[test]
 fn claude_streamed_message_snapshots_replace_the_same_usage() {
     let mut log = Log::new("session.jsonl".into(), "claude");
     let row = |output| json!({"type":"assistant","message":{"id":"m1","usage":{"input_tokens":10,"output_tokens":output,"cache_read_input_tokens":30,"cache_creation_input_tokens":5}}});

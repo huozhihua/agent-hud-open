@@ -9,7 +9,48 @@ use crate::{
 use serde_json::{json, Value};
 
 impl Log {
+    /// Keeps the model provider a rollout's own `session_meta` names, so its
+    /// calls carry it as their route (`codex_model`): `openai` and none are
+    /// OpenAI's own service; `ollama`, `lmstudio` and `oss` run on this
+    /// computer; any other id is a provider configured in `config.toml`.
+    pub fn note_codex_provider(&mut self, value: &Value) {
+        if value["type"] != "session_meta" {
+            return;
+        }
+        let payload = &value["payload"];
+        let own = match self.live.session_id.as_deref() {
+            Some(session) => payload["id"].as_str() == Some(session),
+            None => true,
+        };
+        if own {
+            self.source_state["provider"] =
+                json!(payload["model_provider"].as_str().unwrap_or("openai"));
+        }
+    }
+
+    /// Whether the rollout's provider is known, or a read resuming past its
+    /// first line has to look at it (`note_codex_provider`).
+    pub fn codex_provider_known(&self) -> bool {
+        self.source_state["provider"].is_string()
+    }
+
+    /// The model a call is recorded under: `<model>#<provider>` when the
+    /// provider is not OpenAI's own service, so pricing can tell a relay or a
+    /// local server from OpenAI (`pricing::model_for`).
+    fn codex_model(&self) -> String {
+        if self.model == "Unknown" {
+            return String::new();
+        }
+        match self.source_state["provider"].as_str() {
+            Some(provider) if !provider.is_empty() && provider != "openai" => {
+                format!("{}#{provider}", self.model)
+            }
+            _ => self.model.clone(),
+        }
+    }
+
     pub fn meter_codex_call(&mut self, value: &Value) {
+        self.note_codex_provider(value);
         // A reply is timed from the newest request-side line (a prompt, a tool
         // result) to its `token_usage_record`, written as the reply finishes.
         // The token count that closes the call comes after the tool results,
@@ -96,11 +137,7 @@ impl Log {
         };
         let event = metering::Event {
             key: metering::event_key(&format!("o{}", self.meter_line_start)),
-            model: if self.model == "Unknown" {
-                String::new()
-            } else {
-                self.model.clone()
-            },
+            model: self.codex_model(),
             at,
             usage: Usage {
                 input: delta.input.saturating_sub(delta.read + delta.write),

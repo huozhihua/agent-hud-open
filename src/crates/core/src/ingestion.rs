@@ -726,6 +726,14 @@ impl AgentHudCore {
                     self.archives.position(log.offset);
                 } else {
                     let mut file = File::open(&path)?;
+                    // A Codex rollout read before its provider was kept says
+                    // it on its first line; resuming past it, look there once.
+                    if source == "codex" && log.offset > 0 && !log.codex_provider_known() {
+                        let (first, _, _) = line(&mut BufReader::new(&mut file))?;
+                        if let Ok(value) = serde_json::from_slice::<serde_json::Value>(&first) {
+                            log.note_codex_provider(&value);
+                        }
+                    }
                     file.seek(SeekFrom::Start(log.offset))?;
                     read_lines(
                         &mut log,

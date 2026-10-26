@@ -259,6 +259,28 @@ pub fn model_for(consumer: &str) -> Option<&'static Model> {
     Some(model)
 }
 
+/// Whether a route reaches a model server on this computer or its network
+/// (a local model, `Ollama` and the like), whose calls are free: no list
+/// price applies, and they cost nothing.
+pub fn is_local_route(route: &str) -> bool {
+    matches!(
+        route,
+        "local" | "oss" | "ollama" | "lmstudio" | "llama.cpp" | "llamacpp" | "vllm"
+    )
+}
+
+/// Whether `consumer` (`<client>-model:<model>#<route>`) runs on a local route.
+fn local(consumer: &str) -> bool {
+    consumer
+        .split_once('#')
+        .is_some_and(|(_, route)| is_local_route(route))
+}
+
+/// What a local call costs: nothing, in US dollars.
+fn free() -> ModelCost {
+    ModelCost::new(Region::International.currency(), 0)
+}
+
 #[derive(Clone, Copy)]
 struct Listing {
     model: &'static Model,
@@ -317,7 +339,11 @@ pub(crate) fn cost_at(
 /// each higher tier of the international list; None when it has no list price.
 /// A call is in the last tier whose start its prompt reaches.
 pub(crate) fn tier_starts(source: &str, model: &str) -> Option<Vec<u64>> {
-    let listing = listing(&format!("{source}-model:{model}"), Region::International)?;
+    let consumer = format!("{source}-model:{model}");
+    if local(&consumer) {
+        return Some(Vec::new());
+    }
+    let listing = listing(&consumer, Region::International)?;
     Some(listing.price.tiers.iter().map(|tier| tier.from).collect())
 }
 
@@ -343,9 +369,13 @@ pub(crate) fn context_window(
         return Some(reported);
     }
     let consumer = format!("{source}-model:{model}");
+    // Only a Claude model gets Claude's 200K when none is published: Claude
+    // Code can run other models, through a relay or on this computer.
+    let claude = consumer.starts_with("claude-model:")
+        && name_of(&consumer).is_some_and(|name| name.contains("claude"));
     let published = listed(&consumer)
         .and_then(|model| model.context_window)
-        .or_else(|| consumer.starts_with("claude-model:").then_some(200_000))?;
+        .or_else(|| claude.then_some(200_000))?;
     Some(if largest_seen.unwrap_or(0) > published {
         published.max(1_000_000)
     } else {
@@ -363,7 +393,11 @@ pub(crate) fn cost_in_tier(
     tokens: &PriceTokens,
     tier: Option<usize>,
 ) -> Option<ModelCost> {
-    let listing = listing(&format!("{source}-model:{model}"), Region::International)?;
+    let consumer = format!("{source}-model:{model}");
+    if local(&consumer) {
+        return Some(free());
+    }
+    let listing = listing(&consumer, Region::International)?;
     let amount = listing.price.rates(tier).amount(KindTokens::from(tokens))?;
     Some(ModelCost::new(listing.region.currency(), amount))
 }
@@ -375,6 +409,9 @@ pub fn consumer_cost(
     region: Region,
     at_ms: Option<i64>,
 ) -> Option<ModelCost> {
+    if local(consumer) {
+        return Some(free());
+    }
     let listing = listing(consumer, region)?;
     let kinds = KindTokens::from(tokens);
     let tier = tiered.then(|| listing.price.tier(kinds)).flatten();
@@ -393,6 +430,49 @@ mod tests {
     fn cost(source: &str, model: &str, tokens: &PriceTokens) -> Option<i128> {
         cost_at(source, model, tokens, true, Region::International, None)
             .map(|cost| cost.amount_pico)
+    }
+
+    #[test]
+    fn a_local_route_is_free_and_a_relay_route_unpriced() {
+        let tokens = every_kind();
+        assert_eq!(cost("codex", "gpt-oss:20b#ollama", &tokens), Some(0));
+        assert_eq!(cost("claude", "qwen3-coder:30b#local", &tokens), Some(0));
+        assert_eq!(
+            cost("codex", "gpt-6-sol#ollama", &tokens),
+            Some(0),
+            "a catalog model served locally is still free"
+        );
+        assert_eq!(
+            tier_starts("codex", "gpt-oss:20b#lmstudio"),
+            Some(Vec::new())
+        );
+        assert_eq!(
+            cost_in_tier("codex", "gpt-oss:20b#oss", &tokens, None).map(|c| c.amount_pico),
+            Some(0)
+        );
+        assert_eq!(cost("codex", "gpt-6-sol#myrelay", &tokens), None, "a relay");
+        assert!(cost("codex", "gpt-6-sol", &tokens).is_some_and(|cost| cost > 0));
+    }
+
+    #[test]
+    fn only_a_claude_model_gets_claudes_window_when_none_is_published() {
+        assert_eq!(
+            context_window("claude", "claude-future-9", None, None),
+            Some(200_000)
+        );
+        assert_eq!(
+            context_window("claude", "qwen3-coder:30b#local", None, None),
+            None
+        );
+        assert_eq!(
+            context_window("claude", "qwen3-coder:30b", None, None),
+            None
+        );
+        assert_eq!(
+            context_window("claude", "qwen3-coder:30b", Some(32_768), None),
+            Some(32_768),
+            "a reported window still counts"
+        );
     }
 
     fn every_kind() -> PriceTokens {

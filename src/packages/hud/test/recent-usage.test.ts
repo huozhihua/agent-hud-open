@@ -42,6 +42,7 @@ const snapshot = {
       unpricedTokens: 0,
     }),
     provider("pi", null),
+    provider("opencode", { tokens: 700, costs: { USD: 0 }, unpricedTokens: 0 }),
   ],
 } as never;
 
@@ -61,6 +62,8 @@ test("an agent with no window or balance shows its last 24 hours, as vendors.rs 
     "two currencies: US dollars first, then + for the other",
   );
   assert.equal(label("pi"), null, "nothing used: nothing to show");
+  assert.equal(label("opencode"), "Free", "a local model costs nothing");
+  assert.equal(recentLabel(recentUsage(snapshot, "opencode"), "zh"), "免费");
 });
 
 test("recent usage sums the providers behind one mark", () => {

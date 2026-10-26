@@ -41,6 +41,9 @@ export function recentCost(
   const shown = currencies.includes("USD") ? "USD" : currencies[0];
   if (shown === undefined) return null;
   const more = recent.unpricedTokens > 0 || currencies.length > 1;
+  // Calls to a model on this computer cost nothing.
+  if (!more && recent.costs[shown] === 0)
+    return language === "zh" ? "免费" : "Free";
   return `≈${moneyShort(recent.costs[shown], shown, language)}${more ? "+" : ""}`;
 }
 

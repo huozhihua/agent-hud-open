@@ -159,6 +159,15 @@ pub fn recent_label(snapshot: &Value, key: &str) -> Option<String> {
         .or_else(|| costs.iter().next())
         .map(|(currency, amount)| (currency.clone(), *amount));
     Some(match shown {
+        Some((_, amount)) if amount == 0.0 && unpriced <= 0.0 && costs.len() == 1 => {
+            // Calls to a model on this computer cost nothing.
+            if snapshot["language"] == "zh" {
+                "免费"
+            } else {
+                "Free"
+            }
+            .to_owned()
+        }
         Some((currency, amount)) => {
             let more = unpriced > 0.0 || costs.len() > 1;
             format!(
@@ -353,7 +362,9 @@ mod tests {
                  "recent": {"tokens": 9_000, "costs": {"USD": 412.5}, "unpricedTokens": 300}},
                 {"id": "kimi", "detected": true, "enabled": true,
                  "recent": {"tokens": 9_000, "costs": {"CNY": 2.0}, "unpricedTokens": 0}},
-                {"id": "pi", "detected": true, "enabled": true, "recent": null}
+                {"id": "pi", "detected": true, "enabled": true, "recent": null},
+                {"id": "opencode", "detected": true, "enabled": true,
+                 "recent": {"tokens": 700, "costs": {"USD": 0.0}, "unpricedTokens": 0}}
             ]
         });
         let rows = vendors(&snapshot, "simple", 0);
@@ -370,6 +381,7 @@ mod tests {
         );
         assert_eq!(label("kimi"), "30%", "a window comes first");
         assert_eq!(label("pi"), "--", "nothing used: nothing to show");
+        assert_eq!(label("opencode"), "Free", "a local model costs nothing");
     }
 
     #[test]

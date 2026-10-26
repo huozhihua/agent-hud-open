@@ -78,7 +78,12 @@ export const integer = (value: number) => numberFormat("en").format(value);
 export const cost = (value: number | null, zh = false, partial = false) =>
   value === null
     ? "—"
-    : `≈${moneyAmount(value, "USD", zh ? "zh" : "en")}${partial ? "+" : ""}`;
+    : value === 0 && !partial
+      ? // Calls to a model on this computer cost nothing.
+        zh
+        ? "免费"
+        : "Free"
+      : `≈${moneyAmount(value, "USD", zh ? "zh" : "en")}${partial ? "+" : ""}`;
 
 /** `money` as a cost, "+" when calls with no list price are left out. */
 export const moneyText = (money: ListMoney, zh = false) =>
