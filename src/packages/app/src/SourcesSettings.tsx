@@ -58,6 +58,7 @@ export default function SourcesSettings({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [credentials, setCredentials] = useState<Record<string, string>>({});
+  const [adding, setAdding] = useState(false);
   const zh = snapshotLanguage(snapshot) === "zh",
     t = (en: string, cn: string) => (zh ? cn : en);
   const providerOrder = (layout.order ?? []).map((key) =>
@@ -90,6 +91,8 @@ export default function SourcesSettings({
     (relay) => source && relay.client === source.id,
   );
   const consented = snapshot.settings.relayReading ?? [];
+  // The clients whose relays can be added by hand.
+  const relayClients = ["claude", "codex"];
   const relayKinds: Record<string, string> = {
     newapi: "New API",
     sub2api: "Sub2API",
@@ -554,7 +557,7 @@ export default function SourcesSettings({
               </div>
             </section>
           )}
-          {relays.length > 0 && (
+          {(relays.length > 0 || relayClients.includes(source.id)) && (
             <section>
               <h3 style={{ fontSize: 14 }}>{t("Relays", "中转站")}</h3>
               <p
@@ -574,46 +577,111 @@ export default function SourcesSettings({
                   const agreed = consented.includes(relay.provider);
                   const kind = relay.kind ? relayKinds[relay.kind] : undefined;
                   return (
-                    <div key={relay.provider} style={row}>
+                    <div key={relay.id ?? relay.provider} style={row}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <strong style={{ fontSize: 13 }}>
-                          {relay.provider}
+                          {relay.name ?? relay.provider}
                         </strong>
-                        {(kind || relay.notice) && (
-                          <p
-                            style={{
-                              fontSize: 12,
-                              color: "var(--muted-foreground)",
-                              margin: "2px 0 0",
-                            }}
-                          >
-                            {[kind, relay.notice].filter(Boolean).join(" · ")}
-                          </p>
-                        )}
+                        <p
+                          style={{
+                            fontSize: 12,
+                            color: "var(--muted-foreground)",
+                            margin: "2px 0 0",
+                          }}
+                        >
+                          {[
+                            relay.manual
+                              ? `${relay.provider} · ${t("added by hand", "手动添加")}`
+                              : undefined,
+                            kind,
+                            relay.notice,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ") ||
+                            t("Found in its configuration", "从配置中发现")}
+                        </p>
                       </div>
-                      <Switch
-                        checked={agreed}
-                        disabled={pending}
-                        aria-label={t(
-                          `Read ${relay.provider}'s balance`,
-                          `读取 ${relay.provider} 的余额`,
-                        )}
-                        onCheckedChange={(value) =>
-                          void perform(() =>
-                            action("set_setting", {
-                              key: "relayReading",
-                              value: value
-                                ? [...consented, relay.provider]
-                                : consented.filter(
-                                    (host) => host !== relay.provider,
-                                  ),
-                            }),
-                          )
-                        }
-                      />
+                      {relay.manual ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={pending}
+                          onClick={() =>
+                            void perform(() =>
+                              action("remove_relay_source", { id: relay.id }),
+                            )
+                          }
+                        >
+                          {t("Remove", "移除")}
+                        </Button>
+                      ) : (
+                        <Switch
+                          checked={agreed}
+                          disabled={pending}
+                          aria-label={t(
+                            `Read ${relay.provider}'s balance`,
+                            `读取 ${relay.provider} 的余额`,
+                          )}
+                          onCheckedChange={(value) =>
+                            void perform(() =>
+                              action("set_setting", {
+                                key: "relayReading",
+                                value: value
+                                  ? [...consented, relay.provider]
+                                  : consented.filter(
+                                      (host) => host !== relay.provider,
+                                    ),
+                              }),
+                            )
+                          }
+                        />
+                      )}
                     </div>
                   );
                 })}
+                {relays.length === 0 && (
+                  <p
+                    style={{
+                      ...row,
+                      fontSize: 12,
+                      color: "var(--muted-foreground)",
+                    }}
+                  >
+                    {t(
+                      `No relay was found in ${source.name}'s configuration.`,
+                      `${source.name} 的配置里没有找到中转站。`,
+                    )}
+                  </p>
+                )}
+                {relayClients.includes(source.id) &&
+                  (adding ? (
+                    <RelayForm
+                      t={t}
+                      pending={pending}
+                      onCancel={() => setAdding(false)}
+                      onSave={(relay) =>
+                        void perform(() =>
+                          action("add_relay_source", {
+                            ...relay,
+                            client: source.id,
+                          }),
+                        ).then((saved) => {
+                          if (saved) setAdding(false);
+                        })
+                      }
+                    />
+                  ) : (
+                    <div style={row}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={pending}
+                        onClick={() => setAdding(true)}
+                      >
+                        {t("Add a relay", "添加中转站")}
+                      </Button>
+                    </div>
+                  ))}
               </div>
             </section>
           )}
@@ -691,5 +759,159 @@ export default function SourcesSettings({
         </div>
       )}
     </div>
+  );
+}
+
+/** A relay added by hand: its name, address, key and how its balance is read. */
+function RelayForm({
+  t,
+  pending,
+  onSave,
+  onCancel,
+}: {
+  t: (en: string, zh: string) => string;
+  pending: boolean;
+  onSave: (relay: Record<string, unknown>) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [baseUrl, setBaseUrl] = useState("");
+  const [key, setKey] = useState("");
+  const [kind, setKind] = useState("auto");
+  const [url, setUrl] = useState("");
+  const [remaining, setRemaining] = useState("");
+  const [divisor, setDivisor] = useState("1");
+  const [currency, setCurrency] = useState("USD");
+  const [header, setHeader] = useState("");
+  const kinds: [string, string][] = [
+    ["auto", t("Find out", "自动识别")],
+    ["newapi", "New API"],
+    ["sub2api", "Sub2API"],
+    ["openrouter", "OpenRouter"],
+    ["custom", t("Custom", "自定义")],
+  ];
+  const field = (
+    label: string,
+    value: string,
+    change: (value: string) => void,
+    options: { secret?: boolean; placeholder?: string } = {},
+  ) => (
+    <label style={{ display: "grid", gap: 4, fontSize: 12 }}>
+      {label}
+      <Input
+        type={options.secret ? "password" : "text"}
+        autoComplete="off"
+        value={value}
+        placeholder={options.placeholder}
+        onChange={(event) => change(event.target.value)}
+      />
+    </label>
+  );
+  return (
+    <form
+      style={{ display: "grid", gap: 10, padding: 16 }}
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSave({
+          name,
+          baseUrl,
+          key,
+          kind,
+          ...(kind === "custom"
+            ? {
+                custom: {
+                  url,
+                  remaining,
+                  divisor: Number(divisor) || 1,
+                  currency,
+                  header,
+                },
+              }
+            : {}),
+        });
+      }}
+    >
+      {field(t("Name", "名称"), name, setName)}
+      {field(t("Address", "地址"), baseUrl, setBaseUrl, {
+        placeholder: "https://relay.example.com",
+      })}
+      {field(t("Key", "Key"), key, setKey, { secret: true })}
+      <label style={{ display: "grid", gap: 4, fontSize: 12 }}>
+        {t("Type", "类型")}
+        <select
+          value={kind}
+          onChange={(event) => setKind(event.target.value)}
+          style={{ height: 30, borderRadius: 6, fontSize: 12 }}
+        >
+          {kinds.map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {kind === "custom" && (
+        <>
+          {field(t("Balance endpoint", "余额接口"), url, setUrl, {
+            placeholder: t(
+              "/api/balance or https://…",
+              "/api/balance 或 https://…",
+            ),
+          })}
+          {field(
+            t("Balance in the answer", "余额在返回里的位置"),
+            remaining,
+            setRemaining,
+            {
+              placeholder: "data.balance",
+            },
+          )}
+          {field(t("Divide by", "除数"), divisor, setDivisor)}
+          <label style={{ display: "grid", gap: 4, fontSize: 12 }}>
+            {t("Currency", "币种")}
+            <select
+              value={currency}
+              onChange={(event) => setCurrency(event.target.value)}
+              style={{ height: 30, borderRadius: 6, fontSize: 12 }}
+            >
+              <option value="USD">USD</option>
+              <option value="CNY">CNY</option>
+            </select>
+          </label>
+          {field(
+            t("Key header (optional)", "key 放在哪个请求头（可不填）"),
+            header,
+            setHeader,
+            {
+              placeholder: "Authorization",
+            },
+          )}
+        </>
+      )}
+      <p style={{ fontSize: 11, color: "var(--muted-foreground)", margin: 0 }}>
+        {t(
+          "The key is kept privately on this Mac and sent only to this address.",
+          "key 只保存在这台 Mac 上，只发给这个地址。",
+        )}
+      </p>
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={pending}
+          onClick={onCancel}
+        >
+          {t("Cancel", "取消")}
+        </Button>
+        <Button
+          type="submit"
+          size="sm"
+          disabled={pending || !name.trim() || !baseUrl.trim() || !key.trim()}
+        >
+          {t("Add", "添加")}
+        </Button>
+      </div>
+    </form>
   );
 }

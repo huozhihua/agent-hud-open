@@ -657,6 +657,10 @@ export interface RelaySource {
   /** Why no balance was read. */
   notice?: string;
   checkedAt?: string | null;
+  /** Added by hand in Settings, with its id and name. */
+  manual?: boolean;
+  id?: string;
+  name?: string;
 }
 export interface BillingPeriod {
   from: string;
@@ -906,4 +910,6 @@ export type NativeMethod =
   | "toggle_hud"
   | "extension"
   | "set_credentials"
-  | "remove_credentials";
+  | "remove_credentials"
+  | "add_relay_source"
+  | "remove_relay_source";

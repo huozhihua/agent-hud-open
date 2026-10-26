@@ -85,6 +85,17 @@ pub fn base_url_host(url: &str) -> Option<String> {
     })
 }
 
+/// `text` as an HTTPS address with a host and no credentials, normalized;
+/// None for anything else.
+pub fn https_address(text: &str) -> Option<String> {
+    let url = url::Url::parse(text.trim()).ok()?;
+    (url.scheme() == "https"
+        && url.host_str().is_some()
+        && url.username().is_empty()
+        && url.password().is_none())
+    .then(|| url.to_string())
+}
+
 /// The host name alone, without a port or IPv6 brackets.
 fn host_name(host: &str) -> String {
     let host = host.trim().trim_end_matches('.').to_ascii_lowercase();

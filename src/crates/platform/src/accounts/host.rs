@@ -85,6 +85,9 @@ impl Host for AccountContext {
         crate::os::stored_secret(service)
     }
     fn saved_credential(&self, agent: &str) -> Result<Option<Value>, String> {
+        if agent == agent_hud_agents::relays::MANUAL {
+            return credentials::relay_sources(self).map(Some);
+        }
         credentials::read(self, agent)
     }
     fn consented(&self, setting: &str) -> bool {

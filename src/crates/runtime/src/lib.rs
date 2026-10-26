@@ -277,7 +277,11 @@ impl Runtime {
     pub fn request(&mut self, method: &str, params: Value) -> Result<Value, String> {
         if matches!(
             method,
-            "credentials_status" | "set_credentials" | "remove_credentials"
+            "credentials_status"
+                | "set_credentials"
+                | "remove_credentials"
+                | "add_relay_source"
+                | "remove_relay_source"
         ) {
             let accounts = self
                 .accounts
@@ -286,6 +290,8 @@ impl Runtime {
             return match method {
                 "credentials_status" => Ok(accounts.credentials_status()),
                 "set_credentials" => accounts.set_credentials(&params),
+                "add_relay_source" => accounts.add_relay_source(&params),
+                "remove_relay_source" => accounts.remove_relay_source(&params),
                 _ => accounts.remove_credentials(&params),
             };
         }

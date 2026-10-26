@@ -208,3 +208,224 @@ pub(super) fn remove(ctx: &AccountContext, params: &Value) -> Result<Value, Stri
     }
     Ok(json!({"kind":"ack","provider":provider,"configured":false}))
 }
+
+/// The relays the owner added by hand (docs/proposals/no-plan-usage.md §5),
+/// keys included, in one private file beside the API credentials.
+fn relays_path(ctx: &AccountContext) -> PathBuf {
+    folder(ctx).join("relays.json")
+}
+
+/// At most this many relays added by hand.
+const RELAY_LIMIT: usize = 32;
+
+/// The relays added by hand, keys included, for the relay reader alone:
+/// `{sources: [{id, client, name, baseUrl, key, kind, custom}]}`.
+pub(super) fn relay_sources(ctx: &AccountContext) -> Result<Value, String> {
+    let path = relays_path(ctx);
+    let meta = match fs::symlink_metadata(&path) {
+        Ok(meta) => meta,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(json!({"sources": []})),
+        Err(_) => return Err(unreadable_relays()),
+    };
+    if !meta.is_file()
+        || meta.file_type().is_symlink()
+        || meta.len() > 256 * 1024
+        || !crate::os::owner_only(&path, &meta)
+    {
+        return Err(unreadable_relays());
+    }
+    let mut bytes = Vec::new();
+    fs::File::open(&path)
+        .and_then(|file| file.take(256 * 1024 + 1).read_to_end(&mut bytes))
+        .map_err(|_| unreadable_relays())?;
+    let value: Value = serde_json::from_slice(&bytes).map_err(|_| unreadable_relays())?;
+    if !value["sources"].is_array() {
+        return Err(unreadable_relays());
+    }
+    Ok(value)
+}
+
+fn unreadable_relays() -> String {
+    l10n::text(
+        "无法读取手动添加的中转站",
+        "Could not read the relays added by hand",
+    )
+}
+
+/// Adds a relay by hand: `{client, name, baseUrl, key, kind, custom}`, where
+/// `kind` is `auto`, `newapi`, `sub2api`, `openrouter` or `custom`, and a
+/// custom one names its balance endpoint (`url`, an HTTPS address or a path),
+/// the JSON path of what is left (`remaining`), a `divisor`, the
+/// `currency` and, optionally, the `header` the key goes in.
+pub(super) fn add_relay_source(ctx: &AccountContext, params: &Value) -> Result<Value, String> {
+    let mut source = relay_source(params)?;
+    let mut sources = relay_sources(ctx)?;
+    let list = sources["sources"]
+        .as_array_mut()
+        .ok_or_else(unreadable_relays)?;
+    if list.len() >= RELAY_LIMIT {
+        return Err(l10n::text(
+            "手动添加的中转站已达上限",
+            "Too many relays added by hand",
+        ));
+    }
+    let id = format!(
+        "relay-{}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+    );
+    source["id"] = json!(id);
+    list.push(source);
+    write_relays(ctx, &sources)?;
+    Ok(json!({"kind": "ack", "id": id}))
+}
+
+/// Removes a relay added by hand, by its `id`.
+pub(super) fn remove_relay_source(ctx: &AccountContext, params: &Value) -> Result<Value, String> {
+    let id = params["id"].as_str().ok_or("id is required")?;
+    let mut sources = relay_sources(ctx)?;
+    let list = sources["sources"]
+        .as_array_mut()
+        .ok_or_else(unreadable_relays)?;
+    list.retain(|source| source["id"] != id);
+    write_relays(ctx, &sources)?;
+    Ok(json!({"kind": "ack", "id": id}))
+}
+
+/// A relay as the owner typed it, checked and trimmed to what is kept.
+fn relay_source(params: &Value) -> Result<Value, String> {
+    let text = |key: &str, limit: usize| {
+        params[key]
+            .as_str()
+            .map(str::trim)
+            .filter(|value| clean(value) && value.chars().count() <= limit)
+    };
+    let invalid = |what: &str, zh: &str| l10n::text(zh, what);
+    let client = text("client", 40)
+        .filter(|client| agent_hud_agents::by_id(client).is_some())
+        .ok_or_else(|| {
+            invalid(
+                "Choose which client uses the relay",
+                "请选择使用这个中转站的客户端",
+            )
+        })?;
+    let name = text("name", 40).ok_or_else(|| invalid("Name the relay", "请给中转站起个名字"))?;
+    let base = text("baseUrl", 2048)
+        .ok_or_else(|| invalid("Enter the relay's address", "请填写中转站地址"))?;
+    let address = agent_hud_agents::endpoints::https_address(base).ok_or_else(|| {
+        invalid(
+            "The relay's address must be an HTTPS address",
+            "中转站地址必须是 HTTPS 地址",
+        )
+    })?;
+    let key =
+        text("key", 4096).ok_or_else(|| invalid("Enter the relay's key", "请填写中转站的 key"))?;
+    let kind = params["kind"].as_str().unwrap_or("auto");
+    if !matches!(
+        kind,
+        "auto" | "newapi" | "sub2api" | "openrouter" | "custom"
+    ) {
+        return Err(invalid("Unknown relay type", "无法识别的中转站类型"));
+    }
+    let mut source =
+        json!({"client": client, "name": name, "baseUrl": address, "key": key, "kind": kind});
+    if kind == "custom" {
+        let custom = &params["custom"];
+        let endpoint = custom["url"].as_str().map(str::trim).unwrap_or("");
+        let endpoint_ok = endpoint.starts_with('/') && clean(endpoint)
+            || agent_hud_agents::endpoints::https_address(endpoint).is_some();
+        let remaining = custom["remaining"].as_str().map(str::trim).unwrap_or("");
+        let path_ok = !remaining.is_empty()
+            && remaining.len() <= 120
+            && remaining
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '[' | ']'));
+        let divisor = custom["divisor"].as_f64().unwrap_or(1.0);
+        let currency = custom["currency"].as_str().unwrap_or("USD");
+        let header = custom["header"]
+            .as_str()
+            .map(str::trim)
+            .filter(|h| !h.is_empty());
+        let header_ok = header.is_none_or(|h| {
+            h.len() <= 64 && h.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+        });
+        if !endpoint_ok
+            || !path_ok
+            || !(divisor.is_finite() && divisor > 0.0)
+            || !matches!(currency, "USD" | "CNY")
+            || !header_ok
+        {
+            return Err(invalid(
+                "A custom relay needs its balance endpoint, the JSON path of the balance, a positive divisor and USD or CNY",
+                "自定义中转站需要余额接口、余额在返回 JSON 里的位置、大于 0 的除数，以及 USD 或 CNY",
+            ));
+        }
+        source["custom"] = json!({"url": endpoint, "remaining": remaining, "divisor": divisor, "currency": currency, "header": header});
+    }
+    Ok(source)
+}
+
+/// Replaces the relays file, privately and at once.
+fn write_relays(ctx: &AccountContext, sources: &Value) -> Result<(), String> {
+    let directory = folder(ctx);
+    private_folder(&directory)?;
+    let temporary = directory.join(format!(
+        ".relays.{}.{}.tmp",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    ));
+    let saved = (|| -> Result<(), String> {
+        let mut file = crate::os::private_file(&temporary, true)
+            .map_err(|_| l10n::text("无法保存中转站", "Could not save the relays"))?;
+        let bytes = serde_json::to_vec(sources)
+            .map_err(|_| l10n::text("无法保存中转站", "Could not save the relays"))?;
+        file.write_all(&bytes)
+            .and_then(|_| file.sync_all())
+            .map_err(|_| l10n::text("无法保存中转站", "Could not save the relays"))?;
+        fs::rename(&temporary, relays_path(ctx))
+            .map_err(|_| l10n::text("无法保存中转站", "Could not save the relays"))
+    })();
+    if saved.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    saved
+}
+
+#[cfg(test)]
+mod relay_source_tests {
+    use super::*;
+
+    #[test]
+    fn a_relay_added_by_hand_is_checked_and_trimmed() {
+        let source = relay_source(&json!({
+            "client": "claude", "name": " My relay ", "baseUrl": "https://relay.example.com/v1",
+            "key": " sk-1 ", "kind": "custom",
+            "custom": {"url": "/balance", "remaining": "data.left", "divisor": 100, "currency": "CNY", "header": "x-api-key", "extra": 1}
+        }))
+        .unwrap();
+        assert_eq!(source["name"], "My relay");
+        assert_eq!(source["key"], "sk-1");
+        assert_eq!(
+            source["custom"],
+            json!({"url": "/balance", "remaining": "data.left", "divisor": 100.0, "currency": "CNY", "header": "x-api-key"})
+        );
+        for bad in [
+            json!({"client": "nobody", "name": "a", "baseUrl": "https://r.example.com", "key": "k"}),
+            json!({"client": "claude", "name": "a", "baseUrl": "http://r.example.com", "key": "k"}),
+            json!({"client": "claude", "name": "a", "baseUrl": "https://u:p@r.example.com", "key": "k"}),
+            json!({"client": "claude", "name": "a", "baseUrl": "https://r.example.com", "key": "k\nx"}),
+            json!({"client": "claude", "name": "a", "baseUrl": "https://r.example.com", "key": "k", "kind": "ftp"}),
+            json!({"client": "claude", "name": "a", "baseUrl": "https://r.example.com", "key": "k", "kind": "custom",
+                   "custom": {"url": "http://r.example.com/b", "remaining": "x"}}),
+            json!({"client": "claude", "name": "a", "baseUrl": "https://r.example.com", "key": "k", "kind": "custom",
+                   "custom": {"url": "/b", "remaining": "x;y"}}),
+        ] {
+            assert!(relay_source(&bad).is_err(), "{bad}");
+        }
+    }
+}

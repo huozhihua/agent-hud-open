@@ -133,3 +133,9 @@ Nothing is sent to a relay until it is switched on (`relayReading`, a list of ho
 
 A balance becomes a billing row of the client (`vendor` `claude` or `codex`, `consumerRoutes` the host). A relay whose endpoints are not recognized shows a notice instead.
 
+A relay can also be added by hand on the client's page: a name, its HTTPS address, its key and its type (find out, New API, Sub2API, OpenRouter, or custom: a GET endpoint, the JSON path of the balance, a divisor, USD or CNY, and optionally the header the key goes in). It is kept with the other API credentials in the private `account-credentials/relays.json`, read without a separate switch, and never shown back.
+
+## Prices
+
+Settings → Prices lists every model the selected logs used in the last 30 days, with its tokens, its price per million tokens and where that comes from. A price is looked for in this order: the owner's own price for the model on that route, then on every route (`customPrices`); free on this computer (a named model server, or a local host the owner calls one in `localKinds`, or by default a local host whose model has no list price); the relay's own list; the vendor's list times the owner's multiplier for the relay (`relayMultipliers`); the vendor's list through its own API or plan. A change prices every log again.
+

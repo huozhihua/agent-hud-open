@@ -244,6 +244,30 @@ impl AccountService {
         self.credentials_changed(params);
         Ok(result)
     }
+    /// Adds a relay by hand (`credentials::add_relay_source`) and reads it.
+    pub fn add_relay_source(&self, params: &Value) -> Result<Value, String> {
+        let _guard = self.credential_lock.lock().map_err(|_| {
+            l10n::text(
+                "凭据存储暂时不可用",
+                "Credential storage lock is unavailable",
+            )
+        })?;
+        let result = credentials::add_relay_source(&self.context, params)?;
+        self.account_changed("relay");
+        Ok(result)
+    }
+    /// Removes a relay added by hand.
+    pub fn remove_relay_source(&self, params: &Value) -> Result<Value, String> {
+        let _guard = self.credential_lock.lock().map_err(|_| {
+            l10n::text(
+                "凭据存储暂时不可用",
+                "Credential storage lock is unavailable",
+            )
+        })?;
+        let result = credentials::remove_relay_source(&self.context, params)?;
+        self.account_changed("relay");
+        Ok(result)
+    }
     pub fn remove_credentials(&self, params: &Value) -> Result<Value, String> {
         let _guard = self.credential_lock.lock().map_err(|_| {
             l10n::text(
