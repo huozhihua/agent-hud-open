@@ -13,7 +13,10 @@ pub(super) fn enrich(event: &mut HookEvent, payload: &Value) {
     if !enriches || event.kind != "completion" {
         return;
     }
-    let Some(path) = payload["transcript_path"].as_str() else {
+    let Some(path) = payload["transcript_path"]
+        .as_str()
+        .or_else(|| payload["transcriptPath"].as_str())
+    else {
         return;
     };
     let Ok(mut file) = File::open(path) else {

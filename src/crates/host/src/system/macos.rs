@@ -99,6 +99,20 @@ pub(super) fn cli_candidates(home: &Path, command: &str, dirs: Vec<PathBuf>) -> 
             }
         }
     }
+    if matches!(command, "agy" | "antigravity") {
+        candidates.push(home.join(".antigravity/antigravity/bin").join(command));
+        for root in [PathBuf::from("/Applications"), home.join("Applications")] {
+            for app in ["Antigravity.app", "Antigravity IDE.app"] {
+                for tail in [
+                    "Contents/Resources/app/bin/agy",
+                    "Contents/Resources/app/bin/antigravity",
+                    "Contents/Resources/bin/agy",
+                ] {
+                    candidates.push(root.join(app).join(tail));
+                }
+            }
+        }
+    }
     candidates.extend(dirs.into_iter().map(|dir| dir.join(command)));
     candidates
 }
@@ -125,6 +139,17 @@ mod tests {
             assert!(candidates.contains(&path), "{path:?} is not a candidate");
         }
         assert_eq!(candidates.last(), Some(&dir.join("codex")));
+        let agy_candidates = cli_candidates(home, "agy", vec![dir.clone()]);
+        for path in [
+            home.join(".antigravity/antigravity/bin/agy"),
+            PathBuf::from("/Applications/Antigravity.app/Contents/Resources/app/bin/agy"),
+            home.join("Applications/Antigravity.app/Contents/Resources/app/bin/agy"),
+        ] {
+            assert!(
+                agy_candidates.contains(&path),
+                "{path:?} is not an agy candidate"
+            );
+        }
         assert_eq!(
             cli_candidates(home, "claude", vec![dir.clone()]),
             [dir.join("claude")]

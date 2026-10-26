@@ -102,6 +102,27 @@ pub(crate) fn engine_candidates(home: &Path, env: &Environment, name: &str) -> V
         ));
     }
     paths.extend(path_entries(env).into_iter().map(|dir| dir.join(name)));
+    if matches!(name, "agy" | "antigravity") {
+        paths.push(home.join(".antigravity/antigravity/bin").join(name));
+        let bundled = |app: PathBuf| {
+            [
+                "Contents/Resources/app/bin/agy",
+                "Contents/Resources/app/bin/antigravity",
+                "Contents/Resources/bin/agy",
+            ]
+            .map(|tail| app.join(tail))
+        };
+        for root in [PathBuf::from("/Applications"), home.join("Applications")] {
+            for app in ["Antigravity.app", "Antigravity IDE.app"] {
+                paths.extend(bundled(root.join(app)));
+            }
+        }
+        if !paths.iter().any(|path| super::unix::executable(path)) {
+            for app in registered_applications("com.google.antigravity") {
+                paths.extend(bundled(app));
+            }
+        }
+    }
     if name == "claude" {
         for version in
             super::unix::newest(&home.join("Library/Application Support/Claude/claude-code"))

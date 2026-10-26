@@ -54,6 +54,9 @@ pub(crate) fn reader_version(path: &Path, source: &str) -> u16 {
     } else if source == "hermes" {
         // 2: calls carry the route their billing provider names.
         2
+    } else if source == "antigravity" {
+        // 2: trajectory_metadata_blob cwd, parent_id, role, duration_ms, archived.
+        2
     } else {
         1
     }
@@ -299,6 +302,9 @@ impl AgentHudCore {
                 reset_contributions.insert(key.clone());
             }
             log.source_state["generation"] = generation.clone();
+            if stamp.source == "antigravity" && log.client.is_none() {
+                log.client = agent_hud_agents::antigravity::transcript::client_from_path(path);
+            }
             if record.parent.is_some() {
                 log.live.parent_id = record.parent.clone();
                 log.live.is_subagent = true;
@@ -325,7 +331,10 @@ impl AgentHudCore {
             if clean_model != "Unknown" || log.model == "Unknown" {
                 log.model = clean_model;
             }
-            if is_batch && record.usage.total() > 0 && log.source_state["hasInference"] != true {
+            if (is_batch || stamp.source == "antigravity")
+                && record.usage.total() > 0
+                && log.source_state["hasInference"] != true
+            {
                 if !log.messages.is_empty() {
                     log.clear_usage();
                     reset_contributions.insert(key.clone());

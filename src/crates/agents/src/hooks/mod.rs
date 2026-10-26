@@ -241,7 +241,10 @@ mod tests {
             flags("codex"),
             ["--permission-hook", "--session-origin-hook"]
         );
-        assert_eq!(flags("antigravity"), ["--completion-hook"]);
+        assert_eq!(
+            flags("antigravity"),
+            ["--completion-hook", "--session-origin-hook"]
+        );
         assert_eq!(
             flags("codebuddy"),
             ["--permission-hook", "--completion-hook"]

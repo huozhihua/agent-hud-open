@@ -34,16 +34,57 @@ fn unique_time(
     )
 }
 
-fn title(path: &Path) -> Option<String> {
-    let file = path
-        .parent()?
-        .parent()?
-        .join("annotations")
-        .join(format!("{}.pbtxt", path.file_stem()?.to_str()?));
-    if fs::metadata(&file).ok()?.len() > 65536 {
-        return None;
+fn annotation(path: &Path) -> (Option<String>, bool) {
+    let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
+        return (None, false);
+    };
+    let Some(file) = path
+        .parent()
+        .and_then(Path::parent)
+        .map(|root| root.join("annotations").join(format!("{stem}.pbtxt")))
+    else {
+        return (None, false);
+    };
+    let Ok(meta) = fs::metadata(&file) else {
+        return (None, false);
+    };
+    if meta.len() > 65536 {
+        return (None, false);
     }
-    let text = fs::read_to_string(file).ok()?;
+    let Ok(text) = fs::read_to_string(file) else {
+        return (None, false);
+    };
+    let archived = has_archived_flag(&text);
+    (parse_title(&text), archived)
+}
+
+fn has_archived_flag(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    let mut at = 0;
+    while let Some(p) = text[at..].find("archived") {
+        let start = at + p;
+        at = start + 8;
+        if start > 0 && !bytes[start - 1].is_ascii_whitespace() && bytes[start - 1] != b'{' {
+            continue;
+        }
+        let Some(rest) = text[at..]
+            .trim_start()
+            .strip_prefix(':')
+            .map(str::trim_start)
+        else {
+            continue;
+        };
+        if rest
+            .strip_prefix("true")
+            .is_some_and(|after| after.is_empty() || !after.as_bytes()[0].is_ascii_alphanumeric())
+        {
+            return true;
+        }
+    }
+    false
+}
+
+fn parse_title(text: &str) -> Option<String> {
     let bytes = text.as_bytes();
     let mut at = 0;
     while let Some(p) = text[at..].find("title") {
@@ -106,6 +147,32 @@ fn title(path: &Path) -> Option<String> {
     None
 }
 
+#[cfg(test)]
+fn title(path: &Path) -> Option<String> {
+    annotation(path).0
+}
+
+fn trajectory_metadata(client: &Connection) -> antigravity_proto::TrajectoryMetadata {
+    let Ok(tables) = sql_tables(client) else {
+        return Default::default();
+    };
+    if !tables.contains("trajectory_metadata_blob") {
+        return Default::default();
+    }
+    client
+        .query_row(
+            "SELECT data FROM trajectory_metadata_blob LIMIT 1",
+            [],
+            |row| match row.get_ref(0)? {
+                rusqlite::types::ValueRef::Blob(b) if b.len() <= 1024 * 1024 => {
+                    Ok(antigravity_proto::metadata(b).unwrap_or_default())
+                }
+                _ => Ok(Default::default()),
+            },
+        )
+        .unwrap_or_default()
+}
+
 pub(crate) fn read(
     client: &Connection,
     ledger: &Connection,
@@ -138,7 +205,24 @@ pub(crate) fn read(
     let mut records = vec![];
     let raw = path.file_stem().unwrap_or_default().to_string_lossy();
     let session = format!("antigravity:{raw}");
-    let caption = title(path);
+    let (mut caption, archived) = annotation(path);
+    let meta = if stage == 2 {
+        trajectory_metadata(client)
+    } else {
+        Default::default()
+    };
+    if caption.is_none() && meta.parent_id.is_some() {
+        caption = meta.role.clone().or_else(|| {
+            meta.agent_name
+                .as_deref()
+                .filter(|n| !n.is_empty())
+                .map(|n| format!("Subagent · {n}"))
+        });
+    }
+    let parent = meta
+        .parent_id
+        .as_deref()
+        .map(|p| format!("antigravity:{p}"));
     let fallback = {
         format!(
             "{} · {}",
@@ -147,6 +231,11 @@ pub(crate) fn read(
                 .any(|c| c.as_os_str() == "antigravity-cli")
             {
                 "Antigravity CLI"
+            } else if path
+                .components()
+                .any(|c| c.as_os_str() == "antigravity-ide")
+            {
+                "Antigravity IDE"
             } else {
                 "Antigravity"
             },
@@ -245,7 +334,7 @@ pub(crate) fn read(
             id: session.clone(),
             title: caption.clone(),
             title_fallback: Some(fallback.clone()),
-            cwd: None,
+            cwd: meta.cwd.clone(),
             model,
             key: format!(
                 "{session}:{}",
@@ -261,11 +350,34 @@ pub(crate) fn read(
                 write: u.write,
                 reasoning: u.thinking.min(u.output),
             },
-            parent: None,
-            archived: Some(false),
+            parent: parent.clone(),
+            archived: Some(archived),
             updated: None,
-            duration_ms: None,
+            duration_ms: turn.duration_ms,
         });
+    }
+    if stage == 2
+        && seen < PAGE
+        && after == i64::MIN
+        && records.is_empty()
+        && (caption.is_some() || meta.cwd.is_some() || parent.is_some() || archived)
+    {
+        if let Some(at) = meta.created_at {
+            records.push(Record {
+                id: session.clone(),
+                title: caption,
+                title_fallback: Some(fallback),
+                cwd: meta.cwd,
+                model: "Unknown".into(),
+                key: format!("{session}:meta"),
+                at,
+                usage: Usage::default(),
+                parent,
+                archived: Some(archived),
+                updated: None,
+                duration_ms: None,
+            });
+        }
     }
     let cursor = if seen == PAGE {
         Some(json!({"stage":stage,"after":last}))

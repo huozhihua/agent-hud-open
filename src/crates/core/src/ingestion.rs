@@ -400,6 +400,30 @@ impl AgentHudCore {
             return Ok(None);
         }
         let (old_log, _) = self.load_parser(&old_path)?;
+        if log.cwd.is_none() {
+            log.cwd = old_log.cwd;
+        }
+        if log.live.parent_id.is_none() && old_log.live.parent_id.is_some() {
+            log.live.parent_id = old_log.live.parent_id;
+            log.live.is_subagent = old_log.live.is_subagent;
+        }
+        log.archived |= old_log.archived;
+        if log.client.is_none() {
+            log.client = old_log.client;
+        }
+        if let (Ok(mut cur), Ok(old)) = (
+            serde_json::to_value(&log.naming),
+            serde_json::to_value(&old_log.naming),
+        ) {
+            for key in ["named", "prompt", "agent", "fallback"] {
+                if cur[key].is_null() && !old[key].is_null() {
+                    cur[key] = old[key].clone();
+                }
+            }
+            if let Ok(merged) = serde_json::from_value(cur) {
+                log.naming = merged;
+            }
+        }
         if old_log.source_state["hasInference"] == true {
             log.messages = old_log.messages;
             log.usage = old_log.usage;
@@ -1280,7 +1304,7 @@ impl LogSession for Log {
             &Default::default(),
         )
         .json();
-        if self.source == "antigravity" {
+        if self.source == "antigravity" && self.client.as_deref() != Some("CLI") {
             if let Some(id) = self.id.strip_prefix("antigravity:") {
                 session["navigationTarget"] =
                     json!({"kind":"antigravity-conversation","id":id,"cwd":self.cwd});

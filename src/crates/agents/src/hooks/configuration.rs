@@ -20,7 +20,11 @@ pub fn configuration(source_name: &str, flag: &str) -> Result<HookConfiguration,
             hooks.completion.iter().map(|hook| hook.event).collect()
         }
         "--session-origin-hook" if hooks.origin.is_some() => {
-            vec!["SessionStart", "UserPromptSubmit"]
+            if matches!(hooks.layout, Layout::OwnedEntry) {
+                vec!["SessionStart", "PreInvocation"]
+            } else {
+                vec!["SessionStart", "UserPromptSubmit"]
+            }
         }
         "--attention-hook" if hooks.attention => vec!["Notification"],
         "--compaction-hook" if hooks.compaction.is_some() => vec!["PreCompact"],
@@ -101,10 +105,23 @@ pub fn hook_commands(
     let root = object(current)?;
     if let Layout::OwnedEntry = hooks.layout {
         let entry = optional_object(&root, "agent-hud")?;
-        return Ok(optional_array(&entry, "Stop")?
-            .iter()
-            .map(|h| h["command"].as_str().unwrap_or("").to_owned())
-            .collect());
+        if desc.events.len() == 1 {
+            return Ok(optional_array(&entry, &desc.events[0])?
+                .iter()
+                .map(|h| h["command"].as_str().unwrap_or("").to_owned())
+                .collect());
+        }
+        let mut commands = vec![];
+        for event in &desc.events {
+            commands.extend(
+                optional_array(&entry, event)?
+                    .iter()
+                    .filter_map(|h| h["command"].as_str())
+                    .filter(|c| owns(Some(c), source, hooks, flag))
+                    .map(str::to_owned),
+            );
+        }
+        return Ok(commands);
     }
     let mut events = optional_object(&root, "hooks")?;
     if let Layout::NestedGroups = hooks.layout {
@@ -241,23 +258,37 @@ pub fn patch_configuration(
     let mut root = object(current)?;
     if let Layout::OwnedEntry = hooks.layout {
         let Some(command) = command else {
+            if let Some(mut entry) = root.get("agent-hud").and_then(Value::as_object).cloned() {
+                for event in &desc.events {
+                    entry.remove(event);
+                }
+                if entry
+                    .keys()
+                    .any(|k| matches!(k.as_str(), "Stop" | "SessionStart" | "PreInvocation"))
+                {
+                    root.insert("agent-hud".into(), Value::Object(entry));
+                    return Ok(Value::Object(root));
+                }
+            }
             root.remove("agent-hud");
             return Ok(Value::Object(root));
         };
         let mut entry = optional_object(&root, "agent-hud")?;
-        let handlers = optional_array(&entry, "Stop")?;
-        let mut handler = handlers
-            .iter()
-            .find_map(Value::as_object)
-            .cloned()
-            .unwrap_or_else(|| {
-                Map::from_iter([
-                    ("type".into(), json!("command")),
-                    ("timeout".into(), json!(timeout(hooks, flag))),
-                ])
-            });
-        handler.insert("command".into(), json!(command));
-        entry.insert("Stop".into(), json!([handler]));
+        for event in &desc.events {
+            let handlers = optional_array(&entry, event)?;
+            let mut handler = handlers
+                .iter()
+                .find_map(Value::as_object)
+                .cloned()
+                .unwrap_or_else(|| {
+                    Map::from_iter([
+                        ("type".into(), json!("command")),
+                        ("timeout".into(), json!(timeout(hooks, flag))),
+                    ])
+                });
+            handler.insert("command".into(), json!(command));
+            entry.insert(event.clone(), json!([handler]));
+        }
         root.insert("agent-hud".into(), Value::Object(entry));
         return Ok(Value::Object(root));
     }

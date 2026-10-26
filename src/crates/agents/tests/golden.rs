@@ -327,7 +327,7 @@ enum Layout {
 impl Pair {
     fn layout(&self) -> Layout {
         match (self.source.as_str(), self.flag) {
-            ("antigravity", "--completion-hook") => Layout::Entry,
+            ("antigravity", _) => Layout::Entry,
             ("cursor" | "copilot", "--completion-hook") => Layout::Flat,
             ("zcode", _) => Layout::Nested,
             _ => Layout::Grouped,

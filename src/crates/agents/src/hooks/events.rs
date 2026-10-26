@@ -64,6 +64,34 @@ pub fn parse_event(
             )))
         }
         "--session-origin-hook" => {
+            if matches!(hooks.layout, super::Layout::OwnedEntry) {
+                if payload.get("terminationReason").is_some() || payload.get("toolCall").is_some() {
+                    return Ok(None);
+                }
+                let Some(session) = text(&payload["conversationId"]) else {
+                    return Ok(None);
+                };
+                let event_name = text(&payload["hook_event_name"]).unwrap_or(
+                    if payload.get("invocationNum").is_some()
+                        || payload.get("initialNumSteps").is_some()
+                    {
+                        "PreInvocation"
+                    } else {
+                        "SessionStart"
+                    },
+                );
+                if !matches!(event_name, "SessionStart" | "PreInvocation") {
+                    return Ok(None);
+                }
+                let mut data = json!({
+                    "eventName": event_name,
+                    "cwd": payload["workspacePaths"][0].as_str().or_else(|| payload["cwd"].as_str()),
+                });
+                if let Some(path) = text(&payload["transcriptPath"]) {
+                    data["transcriptPath"] = json!(path);
+                }
+                return Ok(Some(event(source, session, now_ms, "origin", data)));
+            }
             if !matches!(
                 payload["hook_event_name"].as_str(),
                 Some("SessionStart" | "UserPromptSubmit")

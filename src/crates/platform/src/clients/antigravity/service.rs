@@ -89,9 +89,20 @@ mod running {
     }
 
     /// The CLI's own executable, rather than another `agy` found on PATH.
-    /// A token-less CLI still supports its read-only `/usage` command.
+    /// A token-less CLI still supports its read-only `/usage` command; when no
+    /// CLI process is running, fall back to the installed or app-bundled CLI.
     pub(super) fn cli_executable() -> Result<Option<String>, String> {
-        Ok(cli_from(crate::os::processes()?))
+        if let Some(running) = cli_from(crate::os::processes()?) {
+            return Ok(Some(running));
+        }
+        let Ok(home) = crate::os::home_dir() else {
+            return Ok(None);
+        };
+        let env = std::env::vars().collect::<crate::os::Environment>();
+        Ok(crate::os::engine_candidates(&home, &env, "agy")
+            .into_iter()
+            .find(|path| crate::os::engine_executable(path))
+            .and_then(|path| path.to_str().map(str::to_owned)))
     }
 
     fn cli_from(processes: Vec<crate::os::ProcessInfo>) -> Option<String> {
@@ -221,9 +232,14 @@ fn allowed(method: &str) -> Result<(), String> {
     if matches!(
         method,
         "GetUserStatus"
+            | "RetrieveUserQuotaSummary"
             | "GetAllCascadeTrajectories"
             | "GetCascadeTrajectory"
             | "HandleCascadeUserInteraction"
+            | "StartCascade"
+            | "SendUserCascadeMessage"
+            | "SendAgentMessage"
+            | "CancelCascadeInvocation"
     ) {
         Ok(())
     } else {
@@ -365,7 +381,17 @@ pub fn read_accounts(params: &Value) -> Result<Value, String> {
     let mut accounts = Vec::new();
     for endpoint in endpoints {
         match service.send(&endpoint, "GetUserStatus", params) {
-            Ok(status) => accounts.push(json!({"source":endpoint.identity(),"status":status})),
+            Ok(status) => {
+                let mut entry = json!({"source":endpoint.identity(),"status":status});
+                if let Ok(summary) = service.send(
+                    &endpoint,
+                    "RetrieveUserQuotaSummary",
+                    &json!({"forceRefresh": false}),
+                ) {
+                    entry["summary"] = summary;
+                }
+                accounts.push(entry);
+            }
             Err(_) => partial = true,
         }
     }

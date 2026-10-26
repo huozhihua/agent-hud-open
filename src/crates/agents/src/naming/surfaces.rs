@@ -132,6 +132,10 @@ pub fn client_category(agent: &str, client: &str) -> (Category, Option<String>) 
         ("codex", "CLI") => (Category::Cli, None),
         ("codex", "CLI · exec") => (Category::Sdk, None),
         ("codex", "IDE") => fixed(Category::Ide, "vscode"),
+        ("antigravity", "Desktop") => fixed(Category::Desktop, "antigravity"),
+        ("antigravity", "CLI") => (Category::Cli, None),
+        ("antigravity", "CLI · exec") => (Category::Sdk, None),
+        ("antigravity", "IDE") => fixed(Category::Ide, "antigravity"),
         (_, other) => fixed(Category::Others, other),
     }
 }
@@ -196,6 +200,7 @@ pub fn bundle_app(bundle: &str) -> Option<&'static str> {
         ("com.apple.dt.Xcode", "xcode"),
         ("com.anthropic.claudefordesktop", "claude"),
         ("com.openai.codex", "codex"),
+        ("com.google.antigravity", "antigravity"),
         ("app.agenthud", AGENT_HUD),
         ("com.agenthud", AGENT_HUD),
     ];

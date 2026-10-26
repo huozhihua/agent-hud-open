@@ -3068,7 +3068,13 @@
       "source": "antigravity"
     },
     "output": {
-      "error": "This client does not support the requested hook"
+      "events": [
+        "SessionStart",
+        "PreInvocation"
+      ],
+      "flag": "--session-origin-hook",
+      "relativePath": ".gemini/config/hooks.json",
+      "source": "antigravity"
     }
   },
   "configuration/antigravity/--unknown-hook": {
@@ -6163,9 +6169,7 @@
       },
       "source": "antigravity"
     },
-    "output": {
-      "error": "This client does not support the requested hook"
-    }
+    "output": null
   },
   "event/matrix/antigravity/--unknown-hook": {
     "input": {
@@ -10031,6 +10035,444 @@
       "remove": {},
       "removeAgainChanges": false,
       "removeRestoresStart": false,
+      "removedCommands": []
+    }
+  },
+  "patch-sequence/antigravity/--session-origin-hook/custom-fields": {
+    "input": {
+      "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+      "flag": "--session-origin-hook",
+      "movedCommand": "'/Users/me/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+      "source": "antigravity",
+      "start": {
+        "agent-hud": {
+          "PreToolUse": [
+            {
+              "command": "/usr/local/bin/audit-log",
+              "type": "command"
+            }
+          ],
+          "Stop": [
+            {
+              "command": "'/Volumes/Agent HUD/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "cwd": "/tmp",
+              "timeout": 30,
+              "type": "command"
+            }
+          ],
+          "description": "Agent HUD",
+          "enabled": true
+        }
+      },
+      "steps": [
+        "install",
+        "install again",
+        "install moved",
+        "remove",
+        "remove again"
+      ]
+    },
+    "output": {
+      "install": {
+        "agent-hud": {
+          "PreInvocation": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "PreToolUse": [
+            {
+              "command": "/usr/local/bin/audit-log",
+              "type": "command"
+            }
+          ],
+          "SessionStart": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "Stop": [
+            {
+              "command": "'/Volumes/Agent HUD/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "cwd": "/tmp",
+              "timeout": 30,
+              "type": "command"
+            }
+          ],
+          "description": "Agent HUD",
+          "enabled": true
+        }
+      },
+      "installedCommands": [
+        "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+        "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity"
+      ],
+      "move": {
+        "agent-hud": {
+          "PreInvocation": [
+            {
+              "command": "'/Users/me/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "PreToolUse": [
+            {
+              "command": "/usr/local/bin/audit-log",
+              "type": "command"
+            }
+          ],
+          "SessionStart": [
+            {
+              "command": "'/Users/me/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "Stop": [
+            {
+              "command": "'/Volumes/Agent HUD/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "cwd": "/tmp",
+              "timeout": 30,
+              "type": "command"
+            }
+          ],
+          "description": "Agent HUD",
+          "enabled": true
+        }
+      },
+      "movedCommands": [
+        "'/Users/me/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+        "'/Users/me/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity"
+      ],
+      "reinstallChanges": false,
+      "remove": {
+        "agent-hud": {
+          "PreToolUse": [
+            {
+              "command": "/usr/local/bin/audit-log",
+              "type": "command"
+            }
+          ],
+          "Stop": [
+            {
+              "command": "'/Volumes/Agent HUD/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "cwd": "/tmp",
+              "timeout": 30,
+              "type": "command"
+            }
+          ],
+          "description": "Agent HUD",
+          "enabled": true
+        }
+      },
+      "removeAgainChanges": false,
+      "removeRestoresStart": true,
+      "removedCommands": []
+    }
+  },
+  "patch-sequence/antigravity/--session-origin-hook/empty": {
+    "input": {
+      "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+      "flag": "--session-origin-hook",
+      "movedCommand": "'/Users/me/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+      "source": "antigravity",
+      "start": {},
+      "steps": [
+        "install",
+        "install again",
+        "install moved",
+        "remove",
+        "remove again"
+      ]
+    },
+    "output": {
+      "install": {
+        "agent-hud": {
+          "PreInvocation": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "SessionStart": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ]
+        }
+      },
+      "installedCommands": [
+        "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+        "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity"
+      ],
+      "move": {
+        "agent-hud": {
+          "PreInvocation": [
+            {
+              "command": "'/Users/me/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "SessionStart": [
+            {
+              "command": "'/Users/me/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ]
+        }
+      },
+      "movedCommands": [
+        "'/Users/me/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+        "'/Users/me/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity"
+      ],
+      "reinstallChanges": false,
+      "remove": {},
+      "removeAgainChanges": false,
+      "removeRestoresStart": true,
+      "removedCommands": []
+    }
+  },
+  "patch-sequence/antigravity/--session-origin-hook/foreign-handlers": {
+    "input": {
+      "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+      "flag": "--session-origin-hook",
+      "movedCommand": "'/Users/me/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+      "source": "antigravity",
+      "start": {
+        "agent-hud": {
+          "PreToolUse": [
+            {
+              "command": "/usr/local/bin/audit-log",
+              "type": "command"
+            }
+          ]
+        },
+        "other-tool": {
+          "Stop": [
+            {
+              "command": "/usr/local/bin/other-tool",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "enabled": true
+        }
+      },
+      "steps": [
+        "install",
+        "install again",
+        "install moved",
+        "remove",
+        "remove again"
+      ]
+    },
+    "output": {
+      "install": {
+        "agent-hud": {
+          "PreInvocation": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "PreToolUse": [
+            {
+              "command": "/usr/local/bin/audit-log",
+              "type": "command"
+            }
+          ],
+          "SessionStart": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ]
+        },
+        "other-tool": {
+          "Stop": [
+            {
+              "command": "/usr/local/bin/other-tool",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "enabled": true
+        }
+      },
+      "installedCommands": [
+        "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+        "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity"
+      ],
+      "move": {
+        "agent-hud": {
+          "PreInvocation": [
+            {
+              "command": "'/Users/me/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "PreToolUse": [
+            {
+              "command": "/usr/local/bin/audit-log",
+              "type": "command"
+            }
+          ],
+          "SessionStart": [
+            {
+              "command": "'/Users/me/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ]
+        },
+        "other-tool": {
+          "Stop": [
+            {
+              "command": "/usr/local/bin/other-tool",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "enabled": true
+        }
+      },
+      "movedCommands": [
+        "'/Users/me/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+        "'/Users/me/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity"
+      ],
+      "reinstallChanges": false,
+      "remove": {
+        "other-tool": {
+          "Stop": [
+            {
+              "command": "/usr/local/bin/other-tool",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "enabled": true
+        }
+      },
+      "removeAgainChanges": false,
+      "removeRestoresStart": false,
+      "removedCommands": []
+    }
+  },
+  "patch-sequence/antigravity/--session-origin-hook/owned-disabled": {
+    "input": {
+      "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+      "flag": "--session-origin-hook",
+      "movedCommand": "'/Users/me/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+      "source": "antigravity",
+      "start": {
+        "agent-hud": {
+          "Stop": [
+            {
+              "command": "'/Volumes/Agent HUD/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "enabled": false
+        }
+      },
+      "steps": [
+        "install",
+        "install again",
+        "install moved",
+        "remove",
+        "remove again"
+      ]
+    },
+    "output": {
+      "install": {
+        "agent-hud": {
+          "PreInvocation": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "SessionStart": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "Stop": [
+            {
+              "command": "'/Volumes/Agent HUD/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "enabled": false
+        }
+      },
+      "installedCommands": [
+        "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+        "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity"
+      ],
+      "move": {
+        "agent-hud": {
+          "PreInvocation": [
+            {
+              "command": "'/Users/me/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "SessionStart": [
+            {
+              "command": "'/Users/me/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "Stop": [
+            {
+              "command": "'/Volumes/Agent HUD/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "enabled": false
+        }
+      },
+      "movedCommands": [
+        "'/Users/me/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+        "'/Users/me/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity"
+      ],
+      "reinstallChanges": false,
+      "remove": {
+        "agent-hud": {
+          "Stop": [
+            {
+              "command": "'/Volumes/Agent HUD/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "enabled": false
+        }
+      },
+      "removeAgainChanges": false,
+      "removeRestoresStart": true,
       "removedCommands": []
     }
   },
@@ -18540,6 +18982,735 @@
           "Stop": [
             {
               "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --completion-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ]
+        },
+        "other-tool": {
+          "Stop": [
+            {
+              "command": "/usr/local/bin/other-tool",
+              "type": "command"
+            }
+          ]
+        },
+        "theme": "dark"
+      },
+      "remove": {
+        "other-tool": {
+          "Stop": [
+            {
+              "command": "/usr/local/bin/other-tool",
+              "type": "command"
+            }
+          ]
+        },
+        "theme": "dark"
+      }
+    }
+  },
+  "patch/antigravity/--session-origin-hook/custom-fields": {
+    "input": {
+      "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+      "current": {
+        "agent-hud": {
+          "PreToolUse": [
+            {
+              "command": "/usr/local/bin/audit-log",
+              "type": "command"
+            }
+          ],
+          "Stop": [
+            {
+              "command": "'/Volumes/Agent HUD/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "cwd": "/tmp",
+              "timeout": 30,
+              "type": "command"
+            }
+          ],
+          "description": "Agent HUD",
+          "enabled": true
+        }
+      },
+      "flag": "--session-origin-hook",
+      "source": "antigravity"
+    },
+    "output": {
+      "hookCommands": [],
+      "install": {
+        "agent-hud": {
+          "PreInvocation": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "PreToolUse": [
+            {
+              "command": "/usr/local/bin/audit-log",
+              "type": "command"
+            }
+          ],
+          "SessionStart": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "Stop": [
+            {
+              "command": "'/Volumes/Agent HUD/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "cwd": "/tmp",
+              "timeout": 30,
+              "type": "command"
+            }
+          ],
+          "description": "Agent HUD",
+          "enabled": true
+        }
+      },
+      "remove": {
+        "agent-hud": {
+          "PreToolUse": [
+            {
+              "command": "/usr/local/bin/audit-log",
+              "type": "command"
+            }
+          ],
+          "Stop": [
+            {
+              "command": "'/Volumes/Agent HUD/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "cwd": "/tmp",
+              "timeout": 30,
+              "type": "command"
+            }
+          ],
+          "description": "Agent HUD",
+          "enabled": true
+        }
+      }
+    }
+  },
+  "patch/antigravity/--session-origin-hook/empty": {
+    "input": {
+      "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+      "current": {},
+      "flag": "--session-origin-hook",
+      "source": "antigravity"
+    },
+    "output": {
+      "hookCommands": [],
+      "install": {
+        "agent-hud": {
+          "PreInvocation": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "SessionStart": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ]
+        }
+      },
+      "remove": {}
+    }
+  },
+  "patch/antigravity/--session-origin-hook/empty-stop": {
+    "input": {
+      "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+      "current": {
+        "agent-hud": {
+          "Stop": []
+        }
+      },
+      "flag": "--session-origin-hook",
+      "source": "antigravity"
+    },
+    "output": {
+      "hookCommands": [],
+      "install": {
+        "agent-hud": {
+          "PreInvocation": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "SessionStart": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "Stop": []
+        }
+      },
+      "remove": {
+        "agent-hud": {
+          "Stop": []
+        }
+      }
+    }
+  },
+  "patch/antigravity/--session-origin-hook/entry-null": {
+    "input": {
+      "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+      "current": {
+        "agent-hud": null
+      },
+      "flag": "--session-origin-hook",
+      "source": "antigravity"
+    },
+    "output": {
+      "hookCommands": {
+        "error": "Unrecognized hook configuration layout"
+      },
+      "install": {
+        "error": "Unrecognized hook configuration layout"
+      },
+      "remove": {}
+    }
+  },
+  "patch/antigravity/--session-origin-hook/entry-string": {
+    "input": {
+      "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+      "current": {
+        "agent-hud": "on"
+      },
+      "flag": "--session-origin-hook",
+      "source": "antigravity"
+    },
+    "output": {
+      "hookCommands": {
+        "error": "Unrecognized hook configuration layout"
+      },
+      "install": {
+        "error": "Unrecognized hook configuration layout"
+      },
+      "remove": {}
+    }
+  },
+  "patch/antigravity/--session-origin-hook/entry-without-stop": {
+    "input": {
+      "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+      "current": {
+        "agent-hud": {
+          "enabled": false
+        }
+      },
+      "flag": "--session-origin-hook",
+      "source": "antigravity"
+    },
+    "output": {
+      "hookCommands": [],
+      "install": {
+        "agent-hud": {
+          "PreInvocation": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "SessionStart": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "enabled": false
+        }
+      },
+      "remove": {}
+    }
+  },
+  "patch/antigravity/--session-origin-hook/foreign-handlers": {
+    "input": {
+      "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+      "current": {
+        "agent-hud": {
+          "PreToolUse": [
+            {
+              "command": "/usr/local/bin/audit-log",
+              "type": "command"
+            }
+          ]
+        },
+        "other-tool": {
+          "Stop": [
+            {
+              "command": "/usr/local/bin/other-tool",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "enabled": true
+        }
+      },
+      "flag": "--session-origin-hook",
+      "source": "antigravity"
+    },
+    "output": {
+      "hookCommands": [],
+      "install": {
+        "agent-hud": {
+          "PreInvocation": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "PreToolUse": [
+            {
+              "command": "/usr/local/bin/audit-log",
+              "type": "command"
+            }
+          ],
+          "SessionStart": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ]
+        },
+        "other-tool": {
+          "Stop": [
+            {
+              "command": "/usr/local/bin/other-tool",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "enabled": true
+        }
+      },
+      "remove": {
+        "other-tool": {
+          "Stop": [
+            {
+              "command": "/usr/local/bin/other-tool",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "enabled": true
+        }
+      }
+    }
+  },
+  "patch/antigravity/--session-origin-hook/owned-current": {
+    "input": {
+      "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+      "current": {
+        "agent-hud": {
+          "Stop": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ]
+        }
+      },
+      "flag": "--session-origin-hook",
+      "source": "antigravity"
+    },
+    "output": {
+      "hookCommands": [],
+      "install": {
+        "agent-hud": {
+          "PreInvocation": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "SessionStart": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "Stop": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ]
+        }
+      },
+      "remove": {
+        "agent-hud": {
+          "Stop": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "patch/antigravity/--session-origin-hook/owned-disabled": {
+    "input": {
+      "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+      "current": {
+        "agent-hud": {
+          "Stop": [
+            {
+              "command": "'/Volumes/Agent HUD/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "enabled": false
+        }
+      },
+      "flag": "--session-origin-hook",
+      "source": "antigravity"
+    },
+    "output": {
+      "hookCommands": [],
+      "install": {
+        "agent-hud": {
+          "PreInvocation": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "SessionStart": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "Stop": [
+            {
+              "command": "'/Volumes/Agent HUD/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "enabled": false
+        }
+      },
+      "remove": {
+        "agent-hud": {
+          "Stop": [
+            {
+              "command": "'/Volumes/Agent HUD/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "enabled": false
+        }
+      }
+    }
+  },
+  "patch/antigravity/--session-origin-hook/owned-moved": {
+    "input": {
+      "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+      "current": {
+        "agent-hud": {
+          "Stop": [
+            {
+              "command": "'/Volumes/Agent HUD/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ]
+        }
+      },
+      "flag": "--session-origin-hook",
+      "source": "antigravity"
+    },
+    "output": {
+      "hookCommands": [],
+      "install": {
+        "agent-hud": {
+          "PreInvocation": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "SessionStart": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "Stop": [
+            {
+              "command": "'/Volumes/Agent HUD/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ]
+        }
+      },
+      "remove": {
+        "agent-hud": {
+          "Stop": [
+            {
+              "command": "'/Volumes/Agent HUD/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "patch/antigravity/--session-origin-hook/root-array": {
+    "input": {
+      "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+      "current": [],
+      "flag": "--session-origin-hook",
+      "source": "antigravity"
+    },
+    "output": {
+      "hookCommands": {
+        "error": "Unrecognized hook configuration layout"
+      },
+      "install": {
+        "error": "Unrecognized hook configuration layout"
+      },
+      "remove": {
+        "error": "Unrecognized hook configuration layout"
+      }
+    }
+  },
+  "patch/antigravity/--session-origin-hook/root-null": {
+    "input": {
+      "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+      "current": null,
+      "flag": "--session-origin-hook",
+      "source": "antigravity"
+    },
+    "output": {
+      "hookCommands": {
+        "error": "Unrecognized hook configuration layout"
+      },
+      "install": {
+        "error": "Unrecognized hook configuration layout"
+      },
+      "remove": {
+        "error": "Unrecognized hook configuration layout"
+      }
+    }
+  },
+  "patch/antigravity/--session-origin-hook/several-stop-entries": {
+    "input": {
+      "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+      "current": {
+        "agent-hud": {
+          "Stop": [
+            "text",
+            {
+              "command": "/usr/local/bin/other-tool",
+              "type": "command"
+            },
+            {
+              "command": "'/Volumes/Agent HUD/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "type": "command"
+            },
+            {
+              "timeout": 9
+            }
+          ]
+        }
+      },
+      "flag": "--session-origin-hook",
+      "source": "antigravity"
+    },
+    "output": {
+      "hookCommands": [],
+      "install": {
+        "agent-hud": {
+          "PreInvocation": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "SessionStart": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "Stop": [
+            "text",
+            {
+              "command": "/usr/local/bin/other-tool",
+              "type": "command"
+            },
+            {
+              "command": "'/Volumes/Agent HUD/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "type": "command"
+            },
+            {
+              "timeout": 9
+            }
+          ]
+        }
+      },
+      "remove": {
+        "agent-hud": {
+          "Stop": [
+            "text",
+            {
+              "command": "/usr/local/bin/other-tool",
+              "type": "command"
+            },
+            {
+              "command": "'/Volumes/Agent HUD/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "type": "command"
+            },
+            {
+              "timeout": 9
+            }
+          ]
+        }
+      }
+    }
+  },
+  "patch/antigravity/--session-origin-hook/stop-object": {
+    "input": {
+      "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+      "current": {
+        "agent-hud": {
+          "Stop": {}
+        }
+      },
+      "flag": "--session-origin-hook",
+      "source": "antigravity"
+    },
+    "output": {
+      "hookCommands": [],
+      "install": {
+        "agent-hud": {
+          "PreInvocation": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "SessionStart": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "Stop": {}
+        }
+      },
+      "remove": {
+        "agent-hud": {
+          "Stop": {}
+        }
+      }
+    }
+  },
+  "patch/antigravity/--session-origin-hook/stop-string": {
+    "input": {
+      "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+      "current": {
+        "agent-hud": {
+          "Stop": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity"
+        }
+      },
+      "flag": "--session-origin-hook",
+      "source": "antigravity"
+    },
+    "output": {
+      "hookCommands": [],
+      "install": {
+        "agent-hud": {
+          "PreInvocation": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "SessionStart": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "Stop": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity"
+        }
+      },
+      "remove": {
+        "agent-hud": {
+          "Stop": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity"
+        }
+      }
+    }
+  },
+  "patch/antigravity/--session-origin-hook/unrelated-settings": {
+    "input": {
+      "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+      "current": {
+        "other-tool": {
+          "Stop": [
+            {
+              "command": "/usr/local/bin/other-tool",
+              "type": "command"
+            }
+          ]
+        },
+        "theme": "dark"
+      },
+      "flag": "--session-origin-hook",
+      "source": "antigravity"
+    },
+    "output": {
+      "hookCommands": [],
+      "install": {
+        "agent-hud": {
+          "PreInvocation": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
+              "timeout": 5,
+              "type": "command"
+            }
+          ],
+          "SessionStart": [
+            {
+              "command": "'/Applications/Agent HUD.app/Contents/MacOS/agent-hud' --session-origin-hook antigravity",
               "timeout": 5,
               "type": "command"
             }
@@ -79383,6 +80554,770 @@
       }
     }
   },
+  "windows/antigravity/--session-origin-hook/duplicates": {
+    "input": {
+      "current": {
+        "hooks": {
+          "PreInvocation": [
+            {
+              "hooks": [
+                {
+                  "args": [
+                    "--session-origin-hook",
+                    "antigravity"
+                  ],
+                  "command": "C:\\Users\\me\\AppData\\Local\\Agent HUD\\agent-hud.exe",
+                  "type": "command"
+                },
+                {
+                  "command": "'C:\\Users\\me\\AppData\\Local\\Agent HUD\\agent-hud.exe' --session-origin-hook antigravity",
+                  "type": "command"
+                },
+                "text"
+              ],
+              "matcher": ""
+            }
+          ],
+          "SessionStart": [
+            {
+              "hooks": [
+                {
+                  "args": [
+                    "--session-origin-hook",
+                    "antigravity"
+                  ],
+                  "command": "C:\\Users\\me\\AppData\\Local\\Agent HUD\\agent-hud.exe",
+                  "type": "command"
+                },
+                {
+                  "command": "'C:\\Users\\me\\AppData\\Local\\Agent HUD\\agent-hud.exe' --session-origin-hook antigravity",
+                  "type": "command"
+                },
+                "text"
+              ],
+              "matcher": ""
+            }
+          ]
+        }
+      },
+      "executables": {
+        "install": "C:\\Program Files\\Agent HUD\\agent-hud.exe",
+        "remove": null
+      },
+      "flag": "--session-origin-hook",
+      "source": "antigravity"
+    },
+    "output": {
+      "install": {
+        "error": "antigravity has no verified Windows hook launch contract; its configuration was not changed"
+      },
+      "remove": {
+        "hooks": {
+          "PreInvocation": [
+            {
+              "hooks": [
+                {
+                  "command": "'C:\\Users\\me\\AppData\\Local\\Agent HUD\\agent-hud.exe' --session-origin-hook antigravity",
+                  "type": "command"
+                },
+                {
+                  "command": "'C:\\Users\\me\\AppData\\Local\\Agent HUD\\agent-hud.exe' --session-origin-hook antigravity",
+                  "type": "command"
+                },
+                "text"
+              ],
+              "matcher": ""
+            }
+          ],
+          "SessionStart": [
+            {
+              "hooks": [
+                {
+                  "command": "'C:\\Users\\me\\AppData\\Local\\Agent HUD\\agent-hud.exe' --session-origin-hook antigravity",
+                  "type": "command"
+                },
+                {
+                  "command": "'C:\\Users\\me\\AppData\\Local\\Agent HUD\\agent-hud.exe' --session-origin-hook antigravity",
+                  "type": "command"
+                },
+                "text"
+              ],
+              "matcher": ""
+            }
+          ]
+        }
+      }
+    }
+  },
+  "windows/antigravity/--session-origin-hook/empty": {
+    "input": {
+      "current": {},
+      "executables": {
+        "install": "C:\\Program Files\\Agent HUD\\agent-hud.exe",
+        "remove": null
+      },
+      "flag": "--session-origin-hook",
+      "source": "antigravity"
+    },
+    "output": {
+      "install": {
+        "error": "antigravity has no verified Windows hook launch contract; its configuration was not changed"
+      },
+      "remove": {}
+    }
+  },
+  "windows/antigravity/--session-origin-hook/empty-path-args": {
+    "input": {
+      "current": {
+        "hooks": {
+          "PreInvocation": [
+            {
+              "hooks": [
+                {
+                  "args": [
+                    "--session-origin-hook",
+                    "antigravity"
+                  ],
+                  "command": "",
+                  "type": "command"
+                }
+              ],
+              "matcher": ""
+            }
+          ],
+          "SessionStart": [
+            {
+              "hooks": [
+                {
+                  "args": [
+                    "--session-origin-hook",
+                    "antigravity"
+                  ],
+                  "command": "",
+                  "type": "command"
+                }
+              ],
+              "matcher": ""
+            }
+          ]
+        }
+      },
+      "executables": {
+        "install": "C:\\Program Files\\Agent HUD\\agent-hud.exe",
+        "remove": null
+      },
+      "flag": "--session-origin-hook",
+      "source": "antigravity"
+    },
+    "output": {
+      "install": {
+        "error": "antigravity has no verified Windows hook launch contract; its configuration was not changed"
+      },
+      "remove": {
+        "hooks": {
+          "PreInvocation": [
+            {
+              "hooks": [
+                {
+                  "args": [
+                    "--session-origin-hook",
+                    "antigravity"
+                  ],
+                  "command": "",
+                  "type": "command"
+                }
+              ],
+              "matcher": ""
+            }
+          ],
+          "SessionStart": [
+            {
+              "hooks": [
+                {
+                  "args": [
+                    "--session-origin-hook",
+                    "antigravity"
+                  ],
+                  "command": "",
+                  "type": "command"
+                }
+              ],
+              "matcher": ""
+            }
+          ]
+        }
+      }
+    }
+  },
+  "windows/antigravity/--session-origin-hook/foreign": {
+    "input": {
+      "current": {
+        "hooks": {
+          "PreInvocation": [
+            {
+              "hooks": [
+                {
+                  "args": [
+                    "--hook"
+                  ],
+                  "command": "C:\\Tools\\audit.exe",
+                  "type": "command"
+                }
+              ],
+              "matcher": ""
+            }
+          ],
+          "SessionStart": [
+            {
+              "hooks": [
+                {
+                  "args": [
+                    "--hook"
+                  ],
+                  "command": "C:\\Tools\\audit.exe",
+                  "type": "command"
+                }
+              ],
+              "matcher": ""
+            }
+          ]
+        }
+      },
+      "executables": {
+        "install": "C:\\Program Files\\Agent HUD\\agent-hud.exe",
+        "remove": null
+      },
+      "flag": "--session-origin-hook",
+      "source": "antigravity"
+    },
+    "output": {
+      "install": {
+        "error": "antigravity has no verified Windows hook launch contract; its configuration was not changed"
+      },
+      "remove": {
+        "hooks": {
+          "PreInvocation": [
+            {
+              "hooks": [
+                {
+                  "args": [
+                    "--hook"
+                  ],
+                  "command": "C:\\Tools\\audit.exe",
+                  "type": "command"
+                }
+              ],
+              "matcher": ""
+            }
+          ],
+          "SessionStart": [
+            {
+              "hooks": [
+                {
+                  "args": [
+                    "--hook"
+                  ],
+                  "command": "C:\\Tools\\audit.exe",
+                  "type": "command"
+                }
+              ],
+              "matcher": ""
+            }
+          ]
+        }
+      }
+    }
+  },
+  "windows/antigravity/--session-origin-hook/foreign-exec-args": {
+    "input": {
+      "current": {
+        "hooks": {
+          "PreInvocation": [
+            {
+              "hooks": [
+                {
+                  "args": [
+                    "--session-origin-hook",
+                    "other-client"
+                  ],
+                  "command": "C:\\Tools\\other.exe",
+                  "type": "command"
+                },
+                {
+                  "args": [
+                    "--session-origin-hook"
+                  ],
+                  "command": "C:\\Tools\\other.exe",
+                  "type": "command"
+                },
+                {
+                  "args": [
+                    "--session-origin-hook",
+                    "antigravity"
+                  ],
+                  "exec": "C:\\Users\\me\\AppData\\Local\\Agent HUD\\agent-hud.exe",
+                  "type": "command"
+                }
+              ],
+              "matcher": ""
+            }
+          ],
+          "SessionStart": [
+            {
+              "hooks": [
+                {
+                  "args": [
+                    "--session-origin-hook",
+                    "other-client"
+                  ],
+                  "command": "C:\\Tools\\other.exe",
+                  "type": "command"
+                },
+                {
+                  "args": [
+                    "--session-origin-hook"
+                  ],
+                  "command": "C:\\Tools\\other.exe",
+                  "type": "command"
+                },
+                {
+                  "args": [
+                    "--session-origin-hook",
+                    "antigravity"
+                  ],
+                  "exec": "C:\\Users\\me\\AppData\\Local\\Agent HUD\\agent-hud.exe",
+                  "type": "command"
+                }
+              ],
+              "matcher": ""
+            }
+          ]
+        }
+      },
+      "executables": {
+        "install": "C:\\Program Files\\Agent HUD\\agent-hud.exe",
+        "remove": null
+      },
+      "flag": "--session-origin-hook",
+      "source": "antigravity"
+    },
+    "output": {
+      "install": {
+        "error": "antigravity has no verified Windows hook launch contract; its configuration was not changed"
+      },
+      "remove": {
+        "hooks": {
+          "PreInvocation": [
+            {
+              "hooks": [
+                {
+                  "args": [
+                    "--session-origin-hook",
+                    "other-client"
+                  ],
+                  "command": "C:\\Tools\\other.exe",
+                  "type": "command"
+                },
+                {
+                  "args": [
+                    "--session-origin-hook"
+                  ],
+                  "command": "C:\\Tools\\other.exe",
+                  "type": "command"
+                },
+                {
+                  "args": [
+                    "--session-origin-hook",
+                    "antigravity"
+                  ],
+                  "exec": "C:\\Users\\me\\AppData\\Local\\Agent HUD\\agent-hud.exe",
+                  "type": "command"
+                }
+              ],
+              "matcher": ""
+            }
+          ],
+          "SessionStart": [
+            {
+              "hooks": [
+                {
+                  "args": [
+                    "--session-origin-hook",
+                    "other-client"
+                  ],
+                  "command": "C:\\Tools\\other.exe",
+                  "type": "command"
+                },
+                {
+                  "args": [
+                    "--session-origin-hook"
+                  ],
+                  "command": "C:\\Tools\\other.exe",
+                  "type": "command"
+                },
+                {
+                  "args": [
+                    "--session-origin-hook",
+                    "antigravity"
+                  ],
+                  "exec": "C:\\Users\\me\\AppData\\Local\\Agent HUD\\agent-hud.exe",
+                  "type": "command"
+                }
+              ],
+              "matcher": ""
+            }
+          ]
+        }
+      }
+    }
+  },
+  "windows/antigravity/--session-origin-hook/odd-entries": {
+    "input": {
+      "current": {
+        "hooks": {
+          "PreInvocation": [
+            "text",
+            {
+              "matcher": "Bash"
+            },
+            {
+              "hooks": "not-a-list"
+            },
+            {
+              "hooks": [
+                {
+                  "args": [
+                    "--session-origin-hook",
+                    "antigravity"
+                  ],
+                  "command": "C:\\Users\\me\\AppData\\Local\\Agent HUD\\agent-hud.exe",
+                  "type": "command"
+                }
+              ],
+              "matcher": ""
+            }
+          ],
+          "SessionStart": [
+            "text",
+            {
+              "matcher": "Bash"
+            },
+            {
+              "hooks": "not-a-list"
+            },
+            {
+              "hooks": [
+                {
+                  "args": [
+                    "--session-origin-hook",
+                    "antigravity"
+                  ],
+                  "command": "C:\\Users\\me\\AppData\\Local\\Agent HUD\\agent-hud.exe",
+                  "type": "command"
+                }
+              ],
+              "matcher": ""
+            }
+          ]
+        }
+      },
+      "executables": {
+        "install": "C:\\Program Files\\Agent HUD\\agent-hud.exe",
+        "remove": null
+      },
+      "flag": "--session-origin-hook",
+      "source": "antigravity"
+    },
+    "output": {
+      "install": {
+        "error": "antigravity has no verified Windows hook launch contract; its configuration was not changed"
+      },
+      "remove": {
+        "hooks": {
+          "PreInvocation": [
+            "text",
+            {
+              "matcher": "Bash"
+            },
+            {
+              "hooks": "not-a-list"
+            },
+            {
+              "hooks": [
+                {
+                  "command": "'C:\\Users\\me\\AppData\\Local\\Agent HUD\\agent-hud.exe' --session-origin-hook antigravity",
+                  "type": "command"
+                }
+              ],
+              "matcher": ""
+            }
+          ],
+          "SessionStart": [
+            "text",
+            {
+              "matcher": "Bash"
+            },
+            {
+              "hooks": "not-a-list"
+            },
+            {
+              "hooks": [
+                {
+                  "command": "'C:\\Users\\me\\AppData\\Local\\Agent HUD\\agent-hud.exe' --session-origin-hook antigravity",
+                  "type": "command"
+                }
+              ],
+              "matcher": ""
+            }
+          ]
+        }
+      }
+    }
+  },
+  "windows/antigravity/--session-origin-hook/owned-command-windows": {
+    "input": {
+      "current": {
+        "hooks": {
+          "PreInvocation": [
+            {
+              "hooks": [
+                {
+                  "command": "'C:\\Users\\me\\AppData\\Local\\Agent HUD\\agent-hud.exe' --session-origin-hook antigravity",
+                  "commandWindows": "powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand c3RhbGU=",
+                  "timeout": 600,
+                  "type": "command"
+                }
+              ],
+              "matcher": ""
+            }
+          ],
+          "SessionStart": [
+            {
+              "hooks": [
+                {
+                  "command": "'C:\\Users\\me\\AppData\\Local\\Agent HUD\\agent-hud.exe' --session-origin-hook antigravity",
+                  "commandWindows": "powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand c3RhbGU=",
+                  "timeout": 600,
+                  "type": "command"
+                }
+              ],
+              "matcher": ""
+            }
+          ]
+        }
+      },
+      "executables": {
+        "install": "C:\\Program Files\\Agent HUD\\agent-hud.exe",
+        "remove": null
+      },
+      "flag": "--session-origin-hook",
+      "source": "antigravity"
+    },
+    "output": {
+      "install": {
+        "error": "antigravity has no verified Windows hook launch contract; its configuration was not changed"
+      },
+      "remove": {
+        "hooks": {
+          "PreInvocation": [
+            {
+              "hooks": [
+                {
+                  "command": "'C:\\Users\\me\\AppData\\Local\\Agent HUD\\agent-hud.exe' --session-origin-hook antigravity",
+                  "commandWindows": "powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand c3RhbGU=",
+                  "timeout": 600,
+                  "type": "command"
+                }
+              ],
+              "matcher": ""
+            }
+          ],
+          "SessionStart": [
+            {
+              "hooks": [
+                {
+                  "command": "'C:\\Users\\me\\AppData\\Local\\Agent HUD\\agent-hud.exe' --session-origin-hook antigravity",
+                  "commandWindows": "powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand c3RhbGU=",
+                  "timeout": 600,
+                  "type": "command"
+                }
+              ],
+              "matcher": ""
+            }
+          ]
+        }
+      }
+    }
+  },
+  "windows/antigravity/--session-origin-hook/owned-exec-args": {
+    "input": {
+      "current": {
+        "hooks": {
+          "PreInvocation": [
+            {
+              "hooks": [
+                {
+                  "args": [
+                    "--session-origin-hook",
+                    "antigravity"
+                  ],
+                  "command": "C:\\Users\\me\\AppData\\Local\\Agent HUD\\agent-hud.exe",
+                  "timeout": 600,
+                  "type": "command"
+                }
+              ],
+              "matcher": ""
+            }
+          ],
+          "SessionStart": [
+            {
+              "hooks": [
+                {
+                  "args": [
+                    "--session-origin-hook",
+                    "antigravity"
+                  ],
+                  "command": "C:\\Users\\me\\AppData\\Local\\Agent HUD\\agent-hud.exe",
+                  "timeout": 600,
+                  "type": "command"
+                }
+              ],
+              "matcher": ""
+            }
+          ]
+        }
+      },
+      "executables": {
+        "install": "C:\\Program Files\\Agent HUD\\agent-hud.exe",
+        "remove": null
+      },
+      "flag": "--session-origin-hook",
+      "source": "antigravity"
+    },
+    "output": {
+      "install": {
+        "error": "antigravity has no verified Windows hook launch contract; its configuration was not changed"
+      },
+      "remove": {
+        "hooks": {
+          "PreInvocation": [
+            {
+              "hooks": [
+                {
+                  "command": "'C:\\Users\\me\\AppData\\Local\\Agent HUD\\agent-hud.exe' --session-origin-hook antigravity",
+                  "timeout": 600,
+                  "type": "command"
+                }
+              ],
+              "matcher": ""
+            }
+          ],
+          "SessionStart": [
+            {
+              "hooks": [
+                {
+                  "command": "'C:\\Users\\me\\AppData\\Local\\Agent HUD\\agent-hud.exe' --session-origin-hook antigravity",
+                  "timeout": 600,
+                  "type": "command"
+                }
+              ],
+              "matcher": ""
+            }
+          ]
+        }
+      }
+    }
+  },
+  "windows/antigravity/--session-origin-hook/owned-posix": {
+    "input": {
+      "current": {
+        "hooks": {
+          "PreInvocation": [
+            {
+              "hooks": [
+                {
+                  "command": "'C:\\Users\\me\\AppData\\Local\\Agent HUD\\agent-hud.exe' --session-origin-hook antigravity",
+                  "timeout": 600,
+                  "type": "command"
+                }
+              ],
+              "matcher": ""
+            }
+          ],
+          "SessionStart": [
+            {
+              "hooks": [
+                {
+                  "command": "'C:\\Users\\me\\AppData\\Local\\Agent HUD\\agent-hud.exe' --session-origin-hook antigravity",
+                  "timeout": 600,
+                  "type": "command"
+                }
+              ],
+              "matcher": ""
+            }
+          ]
+        }
+      },
+      "executables": {
+        "install": "C:\\Program Files\\Agent HUD\\agent-hud.exe",
+        "remove": null
+      },
+      "flag": "--session-origin-hook",
+      "source": "antigravity"
+    },
+    "output": {
+      "install": {
+        "error": "antigravity has no verified Windows hook launch contract; its configuration was not changed"
+      },
+      "remove": {
+        "hooks": {
+          "PreInvocation": [
+            {
+              "hooks": [
+                {
+                  "command": "'C:\\Users\\me\\AppData\\Local\\Agent HUD\\agent-hud.exe' --session-origin-hook antigravity",
+                  "timeout": 600,
+                  "type": "command"
+                }
+              ],
+              "matcher": ""
+            }
+          ],
+          "SessionStart": [
+            {
+              "hooks": [
+                {
+                  "command": "'C:\\Users\\me\\AppData\\Local\\Agent HUD\\agent-hud.exe' --session-origin-hook antigravity",
+                  "timeout": 600,
+                  "type": "command"
+                }
+              ],
+              "matcher": ""
+            }
+          ]
+        }
+      }
+    }
+  },
+  "windows/antigravity/--session-origin-hook/root-array": {
+    "input": {
+      "current": [],
+      "executables": {
+        "install": "C:\\Program Files\\Agent HUD\\agent-hud.exe",
+        "remove": null
+      },
+      "flag": "--session-origin-hook",
+      "source": "antigravity"
+    },
+    "output": {
+      "install": {
+        "error": "antigravity has no verified Windows hook launch contract; its configuration was not changed"
+      },
+      "remove": {
+        "error": "Unrecognized hook configuration layout"
+      }
+    }
+  },
   "windows/claude/--attention-hook/duplicates": {
     "input": {
       "current": {
@@ -89648,11 +91583,9 @@
     },
     "output": {
       "install": {
-        "error": "This client does not support the requested hook"
+        "error": "antigravity has no verified Windows hook launch contract; its configuration was not changed"
       },
-      "remove": {
-        "error": "This client does not support the requested hook"
-      }
+      "remove": {}
     }
   },
   "windows/matrix/antigravity/--unknown-hook": {

@@ -364,7 +364,10 @@ pub(super) fn accepts_source(path: &Path, source: &str) -> bool {
                         && !name.ends_with(".zst")
                         && !name.ends_with(".tmp")))
         }
-        "hermes" | "zcode" | "devin" | "opencode" | "antigravity" | "grok-bot" | "cursor" => false,
+        "hermes" | "zcode" | "devin" | "opencode" | "grok-bot" | "cursor" => false,
+        "antigravity" => {
+            name == "transcript.jsonl" && path.components().any(|p| p.as_os_str() == "brain")
+        }
         "grok-cli" => name == "updates.jsonl" || name == "unified.jsonl",
         "copilot" => name == "events.jsonl",
         _ => name.ends_with(".jsonl"),
@@ -437,16 +440,7 @@ fn walk(
         return;
     }
     if source == "antigravity" {
-        if let Ok(entries) = fs::read_dir(path) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if let Ok(meta) = fs::symlink_metadata(&path) {
-                    if meta.is_file() && accepts_source(&path, source) {
-                        files.insert(path.clone(), stamp(&path, source, &meta));
-                    }
-                }
-            }
-        }
+        walk_antigravity(path, source, files);
         return;
     }
     let entries = match fs::read_dir(path) {
@@ -466,6 +460,64 @@ fn walk(
                     && entry.file_name().to_string_lossy().starts_with('.') => {}
             Ok(entry) => walk(&entry.path(), source, files, errors),
             Err(error) => errors.push(format!("Could not list {source} logs: {error}")),
+        }
+    }
+}
+
+fn walk_antigravity(path: &Path, source: &'static str, files: &mut HashMap<PathBuf, FileStamp>) {
+    fn insert_if_accepted(
+        candidate: PathBuf,
+        source: &'static str,
+        files: &mut HashMap<PathBuf, FileStamp>,
+    ) {
+        if let Ok(meta) = fs::symlink_metadata(&candidate) {
+            if !meta.is_symlink() && meta.is_file() && accepts_source(&candidate, source) {
+                files.insert(candidate.clone(), stamp(&candidate, source, &meta));
+            }
+        }
+    }
+    fn scan_flat(dir: &Path, source: &'static str, files: &mut HashMap<PathBuf, FileStamp>) {
+        if let Ok(entries) = fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                insert_if_accepted(entry.path(), source, files);
+            }
+        }
+    }
+    fn scan_brain(brain_dir: &Path, source: &'static str, files: &mut HashMap<PathBuf, FileStamp>) {
+        if let Ok(entries) = fs::read_dir(brain_dir) {
+            for entry in entries.flatten() {
+                insert_if_accepted(
+                    entry.path().join(".system_generated/logs/transcript.jsonl"),
+                    source,
+                    files,
+                );
+            }
+        }
+    }
+    scan_flat(path, source, files);
+    let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
+    if name == "brain" {
+        scan_brain(path, source, files);
+        return;
+    }
+    if path.components().any(|c| c.as_os_str() == "brain") {
+        for rel in [
+            ".system_generated/logs/transcript.jsonl",
+            "logs/transcript.jsonl",
+            "transcript.jsonl",
+        ] {
+            insert_if_accepted(path.join(rel), source, files);
+        }
+        return;
+    }
+    if name != "conversations" {
+        let conv = path.join("conversations");
+        if conv.is_dir() {
+            scan_flat(&conv, source, files);
+        }
+        let brain = path.join("brain");
+        if brain.is_dir() {
+            scan_brain(&brain, source, files);
         }
     }
 }

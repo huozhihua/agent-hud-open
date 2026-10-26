@@ -41,12 +41,13 @@ pub static SHARED: Turns = Turns {
     may_name: shared_may_name,
 };
 
-const STATED: [&Turns; 5] = [
+const STATED: [&Turns; 6] = [
     &crate::codex::transcript::TURNS,
     &crate::claude::transcript::TURNS,
     &crate::deepseek::transcript::TURNS,
     &crate::copilot::transcript::TURNS,
     &crate::kimi::transcript::TURNS,
+    &crate::antigravity::transcript::TURNS,
 ];
 
 fn shared_start(value: &Value) -> Option<TurnStart> {

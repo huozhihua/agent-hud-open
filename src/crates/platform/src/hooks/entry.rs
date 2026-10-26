@@ -117,12 +117,16 @@ fn handle_payload(arguments: &[String], data: &Path, input: &[u8], output: &mut 
         super::completion::enrich(&mut event, &payload);
         if let Some(path) = payload["transcript_path"]
             .as_str()
+            .or_else(|| payload["transcriptPath"].as_str())
             .filter(|p| !p.is_empty() && p.len() <= 32 * 1024 && !p.contains('\0'))
         {
             event.data["transcriptPath"] = json!(path);
         }
         if event.kind == "origin" {
-            let raw = payload["session_id"].as_str().unwrap_or("");
+            let raw = payload["session_id"]
+                .as_str()
+                .or_else(|| payload["conversationId"].as_str())
+                .unwrap_or("");
             let origin = home
                 .as_ref()
                 .map(|home| super::origins::origin(source, raw, home, &env))
@@ -131,6 +135,14 @@ fn handle_payload(arguments: &[String], data: &Path, input: &[u8], output: &mut 
                 );
             if let (Some(data), Some(origin)) = (event.data.as_object_mut(), origin.as_object()) {
                 data.extend(origin.clone());
+                if let Some(cwd) = data.get("cwd").and_then(Value::as_str).map(str::to_owned) {
+                    if let Some(target) = data
+                        .get_mut("navigationTarget")
+                        .and_then(Value::as_object_mut)
+                    {
+                        target.entry("cwd").or_insert_with(|| json!(cwd));
+                    }
+                }
             }
             // Where the session's calls go; a local server is asked what it
             // is only when the session starts.
@@ -142,11 +154,14 @@ fn handle_payload(arguments: &[String], data: &Path, input: &[u8], output: &mut 
         let _ = super::record_event(data, &event);
         // A turn's tokens, for a client that keeps them nowhere else (Cursor).
         let _ = super::turn_log::append(data, &event);
+        let transcript_path = payload["transcript_path"]
+            .as_str()
+            .or_else(|| payload["transcriptPath"].as_str());
         let _ = super::transport::send(
             data,
             source,
             flag,
-            &json!({"transcript_path":payload["transcript_path"].as_str()}),
+            &json!({"transcript_path":transcript_path}),
             None,
         );
     }

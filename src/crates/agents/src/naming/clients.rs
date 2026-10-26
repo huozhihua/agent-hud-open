@@ -48,6 +48,13 @@ pub fn client_name(source: &str, client: Option<&str>) -> Option<String> {
             Some(other) if other != "Claude Code" => other.into(),
             _ => "Claude Code".into(),
         }),
+        "antigravity" => match client {
+            Some("Desktop") => Some("Antigravity Desktop".into()),
+            Some("CLI") | Some("CLI · exec") => Some("Antigravity CLI".into()),
+            Some("IDE") => Some("Antigravity IDE".into()),
+            None | Some("Antigravity") => None,
+            Some(other) => Some(other.into()),
+        },
         _ => None,
     }
 }

@@ -24,6 +24,17 @@ pub struct Turn {
     pub label: Option<String>,
     pub requested: Option<u64>,
     pub execution: Option<String>,
+    pub duration_ms: Option<u64>,
+}
+
+#[derive(Default, Clone, Debug, PartialEq, Eq)]
+pub struct TrajectoryMetadata {
+    pub cwd: Option<String>,
+    pub parent_id: Option<String>,
+    pub root_id: Option<String>,
+    pub agent_name: Option<String>,
+    pub role: Option<String>,
+    pub created_at: Option<i64>,
 }
 
 #[derive(Default)]
@@ -75,6 +86,8 @@ fn auxiliary(f: Field<'_>, value: &mut Option<String>, invalid: &mut bool) {
 pub fn turn(bytes: &[u8]) -> Option<Turn> {
     let mut t = Turn::default();
     let mut time = Timestamp::default();
+    let mut streaming_ms: u64 = 0;
+    let mut ttft_ms: u64 = 0;
     let mut found = false;
     fields(bytes, |f| {
         match f.number {
@@ -107,6 +120,8 @@ pub fn turn(bytes: &[u8]) -> Option<Turn> {
                             }
                             Ok(())
                         })?,
+                        11 => streaming_ms = duration_ms(c.bytes()?).unwrap_or(0),
+                        12 => ttft_ms = duration_ms(c.bytes()?).unwrap_or(0),
                         19 => t.model = c.string()?,
                         21 => t.label = c.string()?,
                         _ => (),
@@ -121,7 +136,109 @@ pub fn turn(bytes: &[u8]) -> Option<Turn> {
     })
     .ok()?;
     t.at = time.ms();
+    let total_ms = streaming_ms.saturating_add(ttft_ms);
+    if total_ms > 0 {
+        t.duration_ms = Some(total_ms);
+    }
     found.then_some(t)
+}
+
+fn duration_ms(bytes: &[u8]) -> Option<u64> {
+    let mut seconds: u64 = 0;
+    let mut nanos: u64 = 0;
+    fields(bytes, |f| {
+        match f.number {
+            1 => seconds = f.counter()?,
+            2 => nanos = f.counter()?,
+            _ => (),
+        }
+        Ok(())
+    })
+    .ok()?;
+    let ms = seconds
+        .saturating_mul(1000)
+        .saturating_add(nanos / 1_000_000);
+    (ms > 0 && ms <= 86_400_000).then_some(ms)
+}
+
+fn file_uri_to_path(raw: Option<String>) -> Option<String> {
+    let text = raw?;
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if let Some(rest) = trimmed.strip_prefix("file://") {
+        url::Url::parse(trimmed)
+            .ok()
+            .and_then(|u| u.to_file_path().ok())
+            .and_then(|p| p.to_str().map(str::to_owned))
+            .or_else(|| (!rest.is_empty()).then(|| rest.to_owned()))
+    } else if trimmed.starts_with('/') {
+        Some(trimmed.to_owned())
+    } else {
+        None
+    }
+}
+
+pub fn metadata(bytes: &[u8]) -> Option<TrajectoryMetadata> {
+    let mut meta = TrajectoryMetadata::default();
+    let mut time = Timestamp::default();
+    let mut valid_time = false;
+    fields(bytes, |f| {
+        match f.number {
+            1 => {
+                let _ = fields(f.bytes()?, |w| {
+                    if matches!(w.number, 1 | 2) && meta.cwd.is_none() {
+                        meta.cwd = file_uri_to_path(w.string()?);
+                    }
+                    Ok(())
+                });
+            }
+            2 => {
+                if f.bytes().and_then(|b| time.read(b)).is_ok() {
+                    valid_time = true;
+                }
+            }
+            4 => {
+                let _ = fields(f.bytes()?, |s| {
+                    if s.number == 1 && meta.agent_name.is_none() {
+                        meta.agent_name = s.string()?;
+                    }
+                    Ok(())
+                });
+            }
+            5 => meta.parent_id = f.string()?.filter(|s| !s.is_empty()),
+            6 => meta.root_id = f.string()?.filter(|s| !s.is_empty()),
+            7 => {
+                if meta.cwd.is_none() {
+                    meta.cwd = file_uri_to_path(f.string()?);
+                }
+            }
+            8 => {
+                let _ = fields(f.bytes()?, |s| {
+                    match s.number {
+                        1 if meta.agent_name.is_none() => meta.agent_name = s.string()?,
+                        2 => meta.role = s.string()?.filter(|r| !r.trim().is_empty()),
+                        _ => (),
+                    }
+                    Ok(())
+                });
+            }
+            _ => (),
+        }
+        Ok(())
+    })
+    .ok()?;
+    if valid_time {
+        meta.created_at = time.ms();
+    }
+    (meta.cwd.is_some()
+        || meta.parent_id.is_some()
+        || meta.root_id.is_some()
+        || meta.agent_name.is_some()
+        || meta.role.is_some()
+        || meta.created_at.is_some())
+    .then_some(meta)
 }
 
 #[derive(Default)]

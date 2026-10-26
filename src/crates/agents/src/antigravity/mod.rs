@@ -3,8 +3,10 @@ pub mod account;
 mod cli;
 mod hooks;
 pub mod permissions;
+pub mod process;
 pub mod proto;
 pub mod statusline;
+pub mod transcript;
 
 use crate::Discovery;
 use crate::{Agent, Carries, Channel, PerOs, Support};
@@ -25,7 +27,11 @@ pub static LOCAL_SERVICE: Channel = Channel {
     },
 };
 
-static SOURCES: [Source; 3] = [
+static SOURCES: [Source; 5] = [
+    Source {
+        reads_as: "antigravity",
+        location: Location::home(&["GEMINI_CLI_HOME"], &[".gemini"], "antigravity-cli"),
+    },
     Source {
         reads_as: "antigravity",
         location: Location::home(
@@ -46,6 +52,10 @@ static SOURCES: [Source; 3] = [
             "antigravity/conversations",
         ),
     },
+    Source {
+        reads_as: "antigravity",
+        location: Location::home(&["GEMINI_CLI_HOME"], &[".gemini"], "antigravity-ide"),
+    },
 ];
 static DISCOVERY: Discovery = Discovery {
     storage: &[
@@ -64,11 +74,19 @@ static DISCOVERY: Discovery = Discovery {
             &[".gemini"],
             "antigravity/conversations",
         ),
+        Location::home(&["GEMINI_CLI_HOME"], &[".gemini"], "antigravity/brain"),
         Location::home(
             &["GEMINI_CLI_HOME"],
             &[".gemini"],
             "antigravity-cli/conversations",
         ),
+        Location::home(&["GEMINI_CLI_HOME"], &[".gemini"], "antigravity-cli/brain"),
+        Location::home(
+            &["GEMINI_CLI_HOME"],
+            &[".gemini"],
+            "antigravity-ide/conversations",
+        ),
+        Location::home(&["GEMINI_CLI_HOME"], &[".gemini"], "antigravity-ide/brain"),
     ],
     commands: &["agy", "antigravity"],
     apps: &["Antigravity", "Antigravity IDE"],
@@ -82,10 +100,10 @@ pub static AGENT: Agent = Agent {
     hooks: Some(&hooks::HOOKS),
     observer: None,
     channel: Some(&LOCAL_SERVICE),
-    program: None,
+    program: Some(process::PROGRAM),
     replies: None,
-    turns: None,
-    items: None,
+    turns: Some(&transcript::TURNS),
+    items: Some(&transcript::ITEMS),
     sources: crate::everywhere(&SOURCES),
     discovery: &DISCOVERY,
 };
