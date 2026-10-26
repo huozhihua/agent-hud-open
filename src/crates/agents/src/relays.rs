@@ -5,8 +5,11 @@
 //! of a relay until the owner agrees to it, address by address
 //! (`relayReading` in Agent HUD's settings); then the key the client already
 //! sends it is sent to that same address, and nowhere else, to read its
-//! balance: OpenRouter's credits, a New API site (one-api / new-api, told by
-//! its public `/api/status`), or a Sub2API site's `/v1/usage`.
+//! balance. A few common templates are tried in turn: OpenRouter's credits,
+//! a New API site (one-api / new-api, told by its public `/api/status`), a
+//! Sub2API site's `/v1/usage`. When none fits, the owner may choose the
+//! template for that address, or describe its balance endpoint
+//! (`custom`); every request still goes only to the relay's own host.
 use crate::account::{read_json, variable, Host, HttpFailure, HttpRequest, Reading};
 use crate::endpoints::{base_url_host, host_kind, HostKind};
 use crate::l10n;
@@ -16,10 +19,14 @@ use std::time::Duration;
 /// The setting that lists the relay addresses the owner agreed to read.
 pub const CONSENT: &str = "relayReading";
 
-/// The saved credential that holds the relays the owner added by hand
-/// (`Host::saved_credential`): `{sources: [{id, client, name, baseUrl, key,
-/// kind, custom}]}`. A relay added by hand is read without asking again.
+/// The saved credential that holds the relays the owner added by hand and
+/// the templates chosen by address (`Host::saved_credential`): `{sources:
+/// [{id, client, name, baseUrl, key}], kinds: {host: {kind, custom}}}`. A
+/// relay added by hand is read without asking again.
 pub const MANUAL: &str = "relay";
+
+/// The templates a relay can be read with; `auto` tries the others in turn.
+pub const KINDS: [&str; 5] = ["auto", "newapi", "sub2api", "openrouter", "custom"];
 
 /// The consent key `Host::consented` answers for one relay address.
 pub fn consent_key(host: &str) -> String {
@@ -38,18 +45,47 @@ struct Target {
     key: String,
     /// What the owner said of a relay added by hand.
     manual: Option<Manual>,
+    /// The template it is read with.
+    choice: Choice,
 }
 
 /// A relay the owner added by hand.
 #[derive(Clone, Debug, PartialEq)]
 struct Manual {
     id: String,
+    /// Empty when the relay's own name is shown.
     name: String,
-    /// `auto`, `newapi`, `sub2api`, `openrouter` or `custom`.
+}
+
+/// The template a relay is read with: one of `KINDS`, `auto` unless the
+/// owner chose one for its address.
+#[derive(Clone, Debug, PartialEq)]
+struct Choice {
     kind: String,
     /// A custom relay's balance endpoint: `{url, remaining, divisor,
     /// currency, header}`.
     custom: Value,
+}
+
+impl Choice {
+    /// The owner's choice for `relay` in `kinds`, else what a relay added by
+    /// hand said before choices were kept by address, else `auto`.
+    fn of(kinds: &Value, relay: &str, legacy: Option<&Value>) -> Choice {
+        [Some(&kinds[relay]), legacy]
+            .into_iter()
+            .flatten()
+            .find_map(|said| {
+                let kind = said["kind"].as_str()?;
+                (KINDS.contains(&kind) && kind != "auto").then(|| Choice {
+                    kind: kind.to_owned(),
+                    custom: said["custom"].clone(),
+                })
+            })
+            .unwrap_or(Choice {
+                kind: "auto".into(),
+                custom: Value::Null,
+            })
+    }
 }
 
 /// A relay's balance as it reports it.
@@ -60,6 +96,14 @@ struct Balance {
     currency: &'static str,
 }
 
+/// What reading a relay found: its balance, a New API site's price list,
+/// and whether any template fit it.
+struct Found {
+    balance: Result<Balance, String>,
+    prices: Option<Value>,
+    recognized: bool,
+}
+
 pub fn read(host: &dyn Host) -> Result<Reading, String> {
     let mut reading = Reading::empty("relay");
     for target in targets(host) {
@@ -68,18 +112,29 @@ pub fn read(host: &dyn Host) -> Result<Reading, String> {
         if let Some(manual) = &target.manual {
             service["manual"] = json!(true);
             service["id"] = json!(manual.id);
-            service["name"] = json!(manual.name);
+            if !manual.name.is_empty() {
+                service["name"] = json!(manual.name);
+            }
+        }
+        if target.choice.kind != "auto" {
+            service["chosen"] = json!(target.choice.kind);
+            if target.choice.kind == "custom" {
+                service["custom"] = target.choice.custom.clone();
+            }
         }
         if consented && !host.cancelled() {
-            let (balance, prices) = balance(host, &target);
-            if let Some(prices) = prices {
+            let read = balance(host, &target);
+            if let Some(prices) = read.prices {
                 service["kind"] = json!("newapi");
                 service["prices"] = prices;
             }
-            match balance {
+            if !read.recognized {
+                service["unrecognized"] = json!(true);
+            }
+            match read.balance {
                 Ok(mut found) => {
                     service["kind"] = json!(found.kind);
-                    if let Some(manual) = &target.manual {
+                    if let Some(manual) = target.manual.as_ref().filter(|m| !m.name.is_empty()) {
                         found.label = manual.name.clone();
                     }
                     reading.billing.push(json!({
@@ -109,15 +164,12 @@ fn targets(host: &dyn Host) -> Vec<Target> {
         .ok()
         .flatten()
         .unwrap_or(Value::Null);
+    let kinds = &saved["kinds"];
     for source in saved["sources"].as_array().into_iter().flatten() {
         let text = |key: &str| source[key].as_str().map(str::to_owned);
-        let (Some(client), Some(base), Some(key), Some(id), Some(name)) = (
-            text("client"),
-            text("baseUrl"),
-            text("key"),
-            text("id"),
-            text("name"),
-        ) else {
+        let (Some(client), Some(base), Some(key), Some(id)) =
+            (text("client"), text("baseUrl"), text("key"), text("id"))
+        else {
             continue;
         };
         let Some(relay) = base_url_host(&base) else {
@@ -129,13 +181,12 @@ fn targets(host: &dyn Host) -> Vec<Target> {
         found.push(Target {
             origin: format!("https://{relay}"),
             client,
+            choice: Choice::of(kinds, &relay, Some(source)),
             host: relay,
             key,
             manual: Some(Manual {
                 id,
-                name,
-                kind: text("kind").unwrap_or_else(|| "auto".into()),
-                custom: source["custom"].clone(),
+                name: text("name").unwrap_or_default(),
             }),
         });
     }
@@ -156,6 +207,7 @@ fn targets(host: &dyn Host) -> Vec<Target> {
         found.push(Target {
             client: client.to_owned(),
             origin: format!("https://{relay}"),
+            choice: Choice::of(kinds, &relay, None),
             host: relay,
             key: key.to_owned(),
             manual: None,
@@ -253,8 +305,9 @@ fn codex_providers(toml: &str) -> Vec<CodexProvider> {
 }
 
 /// What the relay reports of the key's balance, and a New API site's price
-/// list (`new_api_prices`), which it shows whatever the key's limit.
-fn balance(host: &dyn Host, target: &Target) -> (Result<Balance, String>, Option<Value>) {
+/// list (`new_api_prices`), which it shows whatever the key's limit. Every
+/// request goes to the relay's own address.
+fn balance(host: &dyn Host, target: &Target) -> Found {
     let ask = |url: &str, key: bool| {
         let authorization = format!("Bearer {}", target.key);
         let secrets: &[(&str, &str)] = if key {
@@ -270,19 +323,17 @@ fn balance(host: &dyn Host, target: &Target) -> (Result<Balance, String>, Option
             timeout: Duration::from_secs(12),
         })
     };
-    let kind = target
-        .manual
-        .as_ref()
-        .map_or("auto", |manual| manual.kind.as_str());
+    let kind = target.choice.kind.as_str();
+    let known = |balance: Result<Balance, String>| Found {
+        balance,
+        prices: None,
+        recognized: true,
+    };
     if kind == "custom" {
-        let custom = &target
-            .manual
-            .as_ref()
-            .map_or(Value::Null, |m| m.custom.clone());
-        return (custom_balance(host, target, custom), None);
+        return known(custom_balance(host, target, &target.choice.custom));
     }
     if kind == "openrouter" || (kind == "auto" && target.host == "openrouter.ai") {
-        return (openrouter(&ask), None);
+        return known(openrouter(target, &ask));
     }
     // A New API site says so on its public status page; one the owner named
     // as New API is read with the default units when the page is closed.
@@ -305,9 +356,17 @@ fn balance(host: &dyn Host, target: &Target) -> (Result<Balance, String>, Option
         let prices = ask(&format!("{}/api/pricing", target.origin), false)
             .ok()
             .and_then(|body| new_api_prices(&body, &status["data"]));
-        return (balance, prices);
+        return Found {
+            balance,
+            prices,
+            recognized: true,
+        };
     }
-    if let Ok(usage) = ask(&format!("{}/v1/usage", target.origin), true) {
+    let usage = ask(&format!("{}/v1/usage", target.origin), true);
+    if let (Err(failed), "sub2api") = (&usage, kind) {
+        return known(Err(failure(*failed)));
+    }
+    if let Ok(usage) = usage {
         let remaining = usage["remaining"]
             .as_f64()
             .or_else(|| usage["quota"]["remaining"].as_f64())
@@ -325,20 +384,27 @@ fn balance(host: &dyn Host, target: &Target) -> (Result<Balance, String>, Option
                     amount,
                     currency,
                 });
-            return (balance, None);
+            return known(balance);
         }
     }
-    (
-        Err(l10n::text(
-            "还不认识这个中转站的余额接口",
-            "This relay's balance endpoint is not one Agent HUD knows yet.",
+    if kind == "sub2api" {
+        return known(Err(l10n::text(
+            "这个地址的 /v1/usage 没有返回余额",
+            "This address's /v1/usage reports no balance.",
+        )));
+    }
+    Found {
+        balance: Err(l10n::text(
+            "没认出这个中转站，可以手选类型",
+            "Agent HUD could not tell what kind of relay this is; choose its type.",
         )),
-        None,
-    )
+        prices: None,
+        recognized: false,
+    }
 }
 
-/// A relay added by hand with its own balance endpoint: a GET of `url` (an
-/// HTTPS address, or a path on the relay) with the key as a bearer token or
+/// A relay with its own balance endpoint: a GET of `url` (a path on the
+/// relay, or an HTTPS address on its host) with the key as a bearer token or
 /// in the named `header`, whose JSON holds what is left at `remaining` (a
 /// path like `data.balance` or `data.items[0].left`), divided by `divisor`,
 /// in `currency`.
@@ -346,8 +412,15 @@ fn custom_balance(host: &dyn Host, target: &Target, custom: &Value) -> Result<Ba
     let endpoint = custom["url"].as_str().unwrap_or("");
     let url = if endpoint.starts_with('/') {
         format!("{}{endpoint}", target.origin)
-    } else {
+    } else if endpoint.starts_with("https://")
+        && base_url_host(endpoint).as_deref() == Some(target.host.as_str())
+    {
         endpoint.to_owned()
+    } else {
+        return Err(l10n::text(
+            "余额接口必须在中转站自己的地址上",
+            "The balance endpoint must be on the relay's own address.",
+        ));
     };
     let bearer = format!("Bearer {}", target.key);
     let secret = match custom["header"].as_str().filter(|h| !h.is_empty()) {
@@ -517,16 +590,20 @@ fn new_api(
     })
 }
 
-/// OpenRouter: the account's credits left, else the key's remaining limit.
-fn openrouter(ask: &dyn Fn(&str, bool) -> Result<Value, HttpFailure>) -> Result<Balance, String> {
-    let credits = ask("https://openrouter.ai/api/v1/credits", true).ok();
+/// OpenRouter, or a relay that answers like it at its own address: the
+/// account's credits left, else the key's remaining limit.
+fn openrouter(
+    target: &Target,
+    ask: &dyn Fn(&str, bool) -> Result<Value, HttpFailure>,
+) -> Result<Balance, String> {
+    let credits = ask(&format!("{}/api/v1/credits", target.origin), true).ok();
     let left = credits.as_ref().and_then(|body| {
         Some(body["data"]["total_credits"].as_f64()? - body["data"]["total_usage"].as_f64()?)
     });
     let amount = match left {
         Some(left) => left,
         None => {
-            let key = ask("https://openrouter.ai/api/v1/key", true).map_err(failure)?;
+            let key = ask(&format!("{}/api/v1/key", target.origin), true).map_err(failure)?;
             key["data"]["limit_remaining"].as_f64().ok_or_else(|| {
                 l10n::text(
                     "这个 OpenRouter key 不限额度，读不到账户余额",
@@ -537,7 +614,11 @@ fn openrouter(ask: &dyn Fn(&str, bool) -> Result<Value, HttpFailure>) -> Result<
     };
     Ok(Balance {
         kind: "openrouter",
-        label: "OpenRouter".into(),
+        label: if target.host == "openrouter.ai" {
+            "OpenRouter".into()
+        } else {
+            target.host.clone()
+        },
         amount,
         currency: "USD",
     })
@@ -733,9 +814,10 @@ mod tests {
         );
         host.saved = Ok(Some(json!({"sources": [{
             "id": "relay-1", "client": "claude", "name": "My relay", "baseUrl": "https://m.example.com/v1",
-            "key": "sk-m", "kind": "custom",
+            "key": "sk-m"
+        }], "kinds": {"m.example.com": {"kind": "custom",
             "custom": {"url": "/dashboard/balance", "remaining": "data.items[0].left", "divisor": 100.0, "currency": "CNY", "header": "x-api-key"}
-        }]})));
+        }}})));
         let reading = read(&host).unwrap();
         let row = &reading.billing[0];
         assert_eq!(
@@ -753,15 +835,99 @@ mod tests {
             (Some(true), Some(true))
         );
         assert_eq!(
-            (service["id"].as_str(), service["kind"].as_str()),
-            (Some("relay-1"), Some("custom"))
+            (
+                service["id"].as_str(),
+                service["kind"].as_str(),
+                service["chosen"].as_str()
+            ),
+            (Some("relay-1"), Some("custom"), Some("custom"))
         );
+        assert_eq!(service["custom"]["remaining"], "data.items[0].left");
         let sent = host.sent.borrow();
         assert_eq!(
             sent[0].0,
             [("x-api-key".to_string(), "sk-m".to_string())],
             "the key in the named header"
         );
+    }
+
+    #[test]
+    fn a_relay_added_by_hand_without_a_name_shows_its_own() {
+        let mut host = FakeHost::new("/u")
+            .answer(
+                "https://named.example.com/api/status",
+                Ok(json!({"data": {"system_name": "Named", "quota_per_unit": 500000, "quota_display_type": "USD"}})),
+            )
+            .answer(
+                "https://named.example.com/api/usage/token/",
+                Ok(json!({"data": {"total_available": 500_000, "unlimited_quota": false}})),
+            );
+        host.saved = Ok(Some(json!({"sources": [{
+            "id": "relay-3", "client": "claude", "name": "", "baseUrl": "https://named.example.com", "key": "sk-n"
+        }]})));
+        let reading = read(&host).unwrap();
+        assert_eq!(reading.billing[0]["label"], "Named");
+        assert!(reading.services[0]["name"].is_null());
+        assert!(reading.services[0]["chosen"].is_null());
+    }
+
+    #[test]
+    fn a_type_chosen_for_an_address_applies_to_the_relay_a_client_uses() {
+        let mut host = claude_relay(FakeHost::new("/u"), "https://pool.example.net/v1").answer(
+            "https://pool.example.net/v1/usage",
+            Ok(json!({"quota": {"remaining": 3.5, "unit": "CNY"}})),
+        );
+        host.saved = Ok(Some(
+            json!({"sources": [], "kinds": {"pool.example.net": {"kind": "sub2api"}}}),
+        ));
+        host.consent.store(true, Ordering::Release);
+        let reading = read(&host).unwrap();
+        assert_eq!(
+            (
+                reading.billing[0]["amount"].as_f64(),
+                reading.billing[0]["currency"].as_str()
+            ),
+            (Some(3.5), Some("CNY"))
+        );
+        assert_eq!(reading.services[0]["chosen"], "sub2api");
+        let asked = host.asked.borrow();
+        assert_eq!(asked.len(), 1, "no sniffing: {asked:?}");
+    }
+
+    #[test]
+    fn every_template_asks_only_the_relays_own_address() {
+        let mut host = claude_relay(FakeHost::new("/u"), "https://gate.example.com/api").answer(
+            "https://gate.example.com/api/v1/credits",
+            Ok(json!({"data": {"total_credits": 9.0, "total_usage": 4.0}})),
+        );
+        host.saved = Ok(Some(
+            json!({"sources": [], "kinds": {"gate.example.com": {"kind": "openrouter"}}}),
+        ));
+        host.consent.store(true, Ordering::Release);
+        let row = &read(&host).unwrap().billing[0];
+        assert_eq!(
+            (row["amount"].as_f64(), row["label"].as_str()),
+            (Some(5.0), Some("gate.example.com"))
+        );
+        assert!(host
+            .asked
+            .borrow()
+            .iter()
+            .all(|(url, _)| url.starts_with("https://gate.example.com/")));
+
+        let mut elsewhere = claude_relay(FakeHost::new("/u"), "https://gate.example.com");
+        elsewhere.saved = Ok(Some(
+            json!({"sources": [], "kinds": {"gate.example.com": {"kind": "custom",
+            "custom": {"url": "https://collector.example.org/balance", "remaining": "left"}}}}),
+        ));
+        elsewhere.consent.store(true, Ordering::Release);
+        let reading = read(&elsewhere).unwrap();
+        assert!(reading.billing.is_empty());
+        assert_eq!(
+            reading.services[0]["notice"],
+            "The balance endpoint must be on the relay's own address."
+        );
+        assert!(elsewhere.asked.borrow().is_empty(), "the key stays home");
     }
 
     #[test]
@@ -802,8 +968,9 @@ mod tests {
         assert!(reading.billing.is_empty());
         assert_eq!(
             reading.services[0]["notice"],
-            "This relay's balance endpoint is not one Agent HUD knows yet."
+            "Agent HUD could not tell what kind of relay this is; choose its type."
         );
+        assert_eq!(reading.services[0]["unrecognized"], true);
     }
 
     #[test]

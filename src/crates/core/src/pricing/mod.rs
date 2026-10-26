@@ -339,16 +339,35 @@ pub(crate) fn set_route_prices(prices: HashMap<String, RoutePrices>) -> bool {
     })
 }
 
-/// What `models` lists for `model`: by its exact name, else by the same name
-/// without a date.
-fn listed_rates<'a, T>(models: &'a HashMap<String, T>, model: &str) -> Option<&'a T> {
-    models.get(model).or_else(|| {
-        let name = normalized_model_name(model)?;
-        models
-            .iter()
-            .find(|(listed, _)| normalized_model_name(listed).as_deref() == Some(name.as_str()))
-            .map(|(_, rates)| rates)
-    })
+/// What a relay's list `models` says for `model`: by its exact name, else by
+/// the same name without a date, else loosely, without a `vendor/` prefix and
+/// with dots read as dashes (`anthropic/claude-sonnet-4.5` is
+/// `claude-sonnet-4-5`), when every loose match has the same rates.
+fn listed_rates<'a, T: PartialEq>(models: &'a HashMap<String, T>, model: &str) -> Option<&'a T> {
+    if let Some(rates) = models.get(model) {
+        return Some(rates);
+    }
+    let name = normalized_model_name(model)?;
+    if let Some((_, rates)) = models
+        .iter()
+        .find(|(listed, _)| normalized_model_name(listed).as_deref() == Some(name.as_str()))
+    {
+        return Some(rates);
+    }
+    let loose = loose_model_name(&name);
+    let mut matches = models
+        .iter()
+        .filter(|(listed, _)| {
+            normalized_model_name(listed).is_some_and(|listed| loose_model_name(&listed) == loose)
+        })
+        .map(|(_, rates)| rates);
+    let first = matches.next()?;
+    matches.all(|rates| rates == first).then_some(first)
+}
+
+/// A normalized model name without a `vendor/` prefix, dots read as dashes.
+fn loose_model_name(name: &str) -> String {
+    name.rsplit('/').next().unwrap_or(name).replace('.', "-")
 }
 
 /// What `tokens` cost at a relay's `rates`.
@@ -796,6 +815,40 @@ mod tests {
                 &tokens
             ),
             None
+        );
+
+        // A relay that names models its own way.
+        set_route_prices(HashMap::from([(
+            "gate-test.example.com".to_string(),
+            RoutePrices {
+                currency: "USD".into(),
+                models: HashMap::from([
+                    ("anthropic/claude-sonnet-4.5".to_string(), [3, 15, 0, 0]),
+                    ("openai/gpt-6".to_string(), [2, 8, 0, 0]),
+                    ("azure/gpt-6".to_string(), [4, 9, 0, 0]),
+                ]),
+            },
+        )]));
+        let plain = PriceTokens {
+            tokens_in: 1_000,
+            tokens_out: 10,
+            cache_read: 0,
+            cache_write: 0,
+            reasoning: 0,
+        };
+        assert_eq!(
+            cost(
+                "claude",
+                "claude-sonnet-4-5-20250929#gate-test.example.com",
+                &plain
+            ),
+            Some(1_000 * 3 + 10 * 15),
+            "vendor prefix and dots"
+        );
+        assert_eq!(
+            cost("codex", "gpt-6#gate-test.example.com", &plain),
+            None,
+            "two listings disagree"
         );
         set_route_prices(HashMap::new());
         assert_eq!(

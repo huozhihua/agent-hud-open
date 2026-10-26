@@ -125,15 +125,17 @@ files keep their bounded incremental replay and an explicit coverage state.
 
 Claude Code and Codex can send their calls through a relay (中转站): Claude Code's `ANTHROPIC_BASE_URL` in `~/.claude/settings.json` `env` (or Agent HUD's own environment), Codex's `[model_providers.<id>]` `base_url` in `config.toml`. The relay reader (`agents::relays`) lists every relay host it finds there with the key configured beside it; official and vendor hosts are not relays. Settings shows each one on the client's page, off by default.
 
-Nothing is sent to a relay until it is switched on (`relayReading`, a list of hosts). Then the key the client already sends that host is sent to the same host, over HTTPS, and nowhere else; Agent HUD keeps no copy of it. What is read:
+Nothing is sent to a relay until it is switched on (`relayReading`, a list of hosts). Then the key the client already sends that host is sent to the same host, over HTTPS, and nowhere else; Agent HUD keeps no copy of it. A few common templates are tried in turn, each on the relay's own address:
 
-- OpenRouter: `/api/v1/credits` (credits left), else `/api/v1/key` (the key's remaining limit).
+- OpenRouter (`openrouter.ai`): `/api/v1/credits` (credits left), else `/api/v1/key` (the key's remaining limit).
 - New API (one-api / new-api), told by its public `/api/status`: `/api/usage/token/` for the account's balance when the site lets the key read it, else the key's remaining quota, in the money the site shows; and its public `/api/pricing`, whose model and group ratios price the calls recorded under that relay's route.
 - Sub2API: `/v1/usage`.
 
-A balance becomes a billing row of the client (`vendor` `claude` or `codex`, `consumerRoutes` the host). A relay whose endpoints are not recognized shows a notice instead.
+A balance becomes a billing row of the client (`vendor` `claude` or `codex`, `consumerRoutes` the host). A relay no template fits shows a notice and a "Choose type" button. The owner then picks one of the templates for that address, or describes its balance endpoint (custom: a GET path on the relay or an HTTPS address on its host, the JSON path of the balance, a divisor, USD or CNY, and optionally the header the key goes in). The choice is kept by host (`set_relay_kind`), so every client that uses the relay reads it the same way; choosing "find out" forgets it.
 
-A relay can also be added by hand on the client's page: a name, its HTTPS address, its key and its type (find out, New API, Sub2API, OpenRouter, or custom: a GET endpoint, the JSON path of the balance, a divisor, USD or CNY, and optionally the header the key goes in). It is kept with the other API credentials in the private `account-credentials/relays.json`, read without a separate switch, and never shown back.
+A relay's price list may name models its own way. A call's model is matched by its exact name, then without a date, then without a `vendor/` prefix and with dots read as dashes, as long as every such match has the same price.
+
+A relay can also be added by hand on the client's page: its HTTPS address, its key, and a name if the owner wants one (else the relay's own name or host is shown). It is kept with the other API credentials, and the chosen types, in the private `account-credentials/relays.json`, read without a separate switch, and the key is never shown back.
 
 ## Prices
 

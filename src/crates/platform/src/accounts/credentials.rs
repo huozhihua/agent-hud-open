@@ -282,6 +282,94 @@ pub(super) fn add_relay_source(ctx: &AccountContext, params: &Value) -> Result<V
     Ok(json!({"kind": "ack", "id": id}))
 }
 
+/// Keeps the template chosen for a relay's address (`relays::KINDS`); `auto`
+/// forgets the choice, so the relay is sniffed again.
+pub(super) fn set_relay_kind(ctx: &AccountContext, params: &Value) -> Result<Value, String> {
+    let (host, choice) = relay_kind(params)?;
+    let mut sources = relay_sources(ctx)?;
+    if !sources["kinds"].is_object() {
+        sources["kinds"] = json!({});
+    }
+    let kinds = sources["kinds"]
+        .as_object_mut()
+        .ok_or_else(unreadable_relays)?;
+    match choice {
+        Some(choice) => {
+            if !kinds.contains_key(&host) && kinds.len() >= RELAY_LIMIT {
+                return Err(l10n::text(
+                    "手选类型的中转站已达上限",
+                    "Too many relays with a chosen type",
+                ));
+            }
+            kinds.insert(host.clone(), choice);
+        }
+        None => {
+            kinds.remove(&host);
+        }
+    }
+    write_relays(ctx, &sources)?;
+    Ok(json!({"kind": "ack", "host": host}))
+}
+
+/// The address and the template the owner chose for it, checked; None for
+/// `auto`. A custom balance endpoint is a path on the relay or an HTTPS
+/// address on its host, so the key never leaves for another one.
+fn relay_kind(params: &Value) -> Result<(String, Option<Value>), String> {
+    use agent_hud_agents::endpoints::{base_url_host, https_address};
+    let invalid = |what: &str, zh: &str| l10n::text(zh, what);
+    let host = params["host"]
+        .as_str()
+        .map(str::trim)
+        .filter(|host| {
+            !host.is_empty() && base_url_host(&format!("https://{host}")).as_deref() == Some(*host)
+        })
+        .ok_or_else(|| invalid("Unknown relay address", "无法识别的中转站地址"))?
+        .to_owned();
+    let kind = params["kind"].as_str().unwrap_or("auto");
+    if !agent_hud_agents::relays::KINDS.contains(&kind) {
+        return Err(invalid("Unknown relay type", "无法识别的中转站类型"));
+    }
+    if kind == "auto" {
+        return Ok((host, None));
+    }
+    let mut choice = json!({"kind": kind});
+    if kind == "custom" {
+        let custom = &params["custom"];
+        let endpoint = custom["url"].as_str().map(str::trim).unwrap_or("");
+        let endpoint_ok = endpoint.starts_with('/') && clean(endpoint) && endpoint.len() <= 2048
+            || https_address(endpoint).is_some()
+                && base_url_host(endpoint).as_deref() == Some(host.as_str());
+        let remaining = custom["remaining"].as_str().map(str::trim).unwrap_or("");
+        let path_ok = !remaining.is_empty()
+            && remaining.len() <= 120
+            && remaining
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '[' | ']'));
+        let divisor = custom["divisor"].as_f64().unwrap_or(1.0);
+        let currency = custom["currency"].as_str().unwrap_or("USD");
+        let header = custom["header"]
+            .as_str()
+            .map(str::trim)
+            .filter(|h| !h.is_empty());
+        let header_ok = header.is_none_or(|h| {
+            h.len() <= 64 && h.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+        });
+        if !endpoint_ok
+            || !path_ok
+            || !(divisor.is_finite() && divisor > 0.0)
+            || !matches!(currency, "USD" | "CNY")
+            || !header_ok
+        {
+            return Err(invalid(
+                "A custom relay needs its balance endpoint on its own address, the JSON path of the balance, a positive divisor and USD or CNY",
+                "自定义中转站需要它自己地址上的余额接口、余额在返回 JSON 里的位置、大于 0 的除数，以及 USD 或 CNY",
+            ));
+        }
+        choice["custom"] = json!({"url": endpoint, "remaining": remaining, "divisor": divisor, "currency": currency, "header": header});
+    }
+    Ok((host, Some(choice)))
+}
+
 /// Removes a relay added by hand, by its `id`.
 pub(super) fn remove_relay_source(ctx: &AccountContext, params: &Value) -> Result<Value, String> {
     let id = params["id"].as_str().ok_or("id is required")?;
@@ -311,7 +399,16 @@ fn relay_source(params: &Value) -> Result<Value, String> {
                 "请选择使用这个中转站的客户端",
             )
         })?;
-    let name = text("name", 40).ok_or_else(|| invalid("Name the relay", "请给中转站起个名字"))?;
+    // Without a name, the relay's own name (or its address) is shown.
+    let name = match params["name"].as_str().map(str::trim) {
+        None | Some("") => "",
+        Some(_) => text("name", 40).ok_or_else(|| {
+            invalid(
+                "Keep the name to 40 characters on one line",
+                "名称最多 40 个字，不能换行",
+            )
+        })?,
+    };
     let base = text("baseUrl", 2048)
         .ok_or_else(|| invalid("Enter the relay's address", "请填写中转站地址"))?;
     let address = agent_hud_agents::endpoints::https_address(base).ok_or_else(|| {
@@ -322,49 +419,7 @@ fn relay_source(params: &Value) -> Result<Value, String> {
     })?;
     let key =
         text("key", 4096).ok_or_else(|| invalid("Enter the relay's key", "请填写中转站的 key"))?;
-    let kind = params["kind"].as_str().unwrap_or("auto");
-    if !matches!(
-        kind,
-        "auto" | "newapi" | "sub2api" | "openrouter" | "custom"
-    ) {
-        return Err(invalid("Unknown relay type", "无法识别的中转站类型"));
-    }
-    let mut source =
-        json!({"client": client, "name": name, "baseUrl": address, "key": key, "kind": kind});
-    if kind == "custom" {
-        let custom = &params["custom"];
-        let endpoint = custom["url"].as_str().map(str::trim).unwrap_or("");
-        let endpoint_ok = endpoint.starts_with('/') && clean(endpoint)
-            || agent_hud_agents::endpoints::https_address(endpoint).is_some();
-        let remaining = custom["remaining"].as_str().map(str::trim).unwrap_or("");
-        let path_ok = !remaining.is_empty()
-            && remaining.len() <= 120
-            && remaining
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '[' | ']'));
-        let divisor = custom["divisor"].as_f64().unwrap_or(1.0);
-        let currency = custom["currency"].as_str().unwrap_or("USD");
-        let header = custom["header"]
-            .as_str()
-            .map(str::trim)
-            .filter(|h| !h.is_empty());
-        let header_ok = header.is_none_or(|h| {
-            h.len() <= 64 && h.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
-        });
-        if !endpoint_ok
-            || !path_ok
-            || !(divisor.is_finite() && divisor > 0.0)
-            || !matches!(currency, "USD" | "CNY")
-            || !header_ok
-        {
-            return Err(invalid(
-                "A custom relay needs its balance endpoint, the JSON path of the balance, a positive divisor and USD or CNY",
-                "自定义中转站需要余额接口、余额在返回 JSON 里的位置、大于 0 的除数，以及 USD 或 CNY",
-            ));
-        }
-        source["custom"] = json!({"url": endpoint, "remaining": remaining, "divisor": divisor, "currency": currency, "header": header});
-    }
-    Ok(source)
+    Ok(json!({"client": client, "name": name, "baseUrl": address, "key": key}))
 }
 
 /// Replaces the relays file, privately and at once.
@@ -404,28 +459,58 @@ mod relay_source_tests {
     fn a_relay_added_by_hand_is_checked_and_trimmed() {
         let source = relay_source(&json!({
             "client": "claude", "name": " My relay ", "baseUrl": "https://relay.example.com/v1",
-            "key": " sk-1 ", "kind": "custom",
-            "custom": {"url": "/balance", "remaining": "data.left", "divisor": 100, "currency": "CNY", "header": "x-api-key", "extra": 1}
+            "key": " sk-1 ", "kind": "custom"
         }))
         .unwrap();
-        assert_eq!(source["name"], "My relay");
-        assert_eq!(source["key"], "sk-1");
         assert_eq!(
-            source["custom"],
-            json!({"url": "/balance", "remaining": "data.left", "divisor": 100.0, "currency": "CNY", "header": "x-api-key"})
+            source,
+            json!({"client": "claude", "name": "My relay", "baseUrl": "https://relay.example.com/v1", "key": "sk-1"})
         );
+        let unnamed = relay_source(&json!({
+            "client": "codex", "baseUrl": "https://relay.example.com", "key": "sk-2"
+        }))
+        .unwrap();
+        assert_eq!(unnamed["name"], "");
         for bad in [
             json!({"client": "nobody", "name": "a", "baseUrl": "https://r.example.com", "key": "k"}),
             json!({"client": "claude", "name": "a", "baseUrl": "http://r.example.com", "key": "k"}),
             json!({"client": "claude", "name": "a", "baseUrl": "https://u:p@r.example.com", "key": "k"}),
             json!({"client": "claude", "name": "a", "baseUrl": "https://r.example.com", "key": "k\nx"}),
-            json!({"client": "claude", "name": "a", "baseUrl": "https://r.example.com", "key": "k", "kind": "ftp"}),
-            json!({"client": "claude", "name": "a", "baseUrl": "https://r.example.com", "key": "k", "kind": "custom",
-                   "custom": {"url": "http://r.example.com/b", "remaining": "x"}}),
-            json!({"client": "claude", "name": "a", "baseUrl": "https://r.example.com", "key": "k", "kind": "custom",
-                   "custom": {"url": "/b", "remaining": "x;y"}}),
+            json!({"client": "claude", "name": "x".repeat(41), "baseUrl": "https://r.example.com", "key": "k"}),
         ] {
             assert!(relay_source(&bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn a_chosen_type_is_checked_and_kept_by_address() {
+        assert_eq!(
+            relay_kind(&json!({"host": "relay.example.com", "kind": "sub2api"})).unwrap(),
+            ("relay.example.com".into(), Some(json!({"kind": "sub2api"})))
+        );
+        assert_eq!(
+            relay_kind(&json!({"host": "relay.example.com:8443", "kind": "auto"})).unwrap(),
+            ("relay.example.com:8443".into(), None)
+        );
+        let (_, custom) = relay_kind(&json!({"host": "m.example.com", "kind": "custom",
+            "custom": {"url": "https://m.example.com/balance", "remaining": "data.left", "divisor": 100, "currency": "CNY", "header": "x-api-key", "extra": 1}}))
+        .unwrap();
+        assert_eq!(
+            custom.unwrap()["custom"],
+            json!({"url": "https://m.example.com/balance", "remaining": "data.left", "divisor": 100.0, "currency": "CNY", "header": "x-api-key"})
+        );
+        for bad in [
+            json!({"host": "https://relay.example.com", "kind": "newapi"}),
+            json!({"host": "Relay.Example.com", "kind": "newapi"}),
+            json!({"host": "relay.example.com", "kind": "ftp"}),
+            json!({"host": "m.example.com", "kind": "custom",
+                   "custom": {"url": "https://collector.example.org/b", "remaining": "x"}}),
+            json!({"host": "m.example.com", "kind": "custom",
+                   "custom": {"url": "http://m.example.com/b", "remaining": "x"}}),
+            json!({"host": "m.example.com", "kind": "custom",
+                   "custom": {"url": "/b", "remaining": "x;y"}}),
+        ] {
+            assert!(relay_kind(&bad).is_err(), "{bad}");
         }
     }
 }

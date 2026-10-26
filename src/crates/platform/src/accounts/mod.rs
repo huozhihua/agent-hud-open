@@ -256,6 +256,19 @@ impl AccountService {
         self.account_changed("relay");
         Ok(result)
     }
+    /// Keeps the template chosen for a relay's address
+    /// (`credentials::set_relay_kind`) and reads the relays again.
+    pub fn set_relay_kind(&self, params: &Value) -> Result<Value, String> {
+        let _guard = self.credential_lock.lock().map_err(|_| {
+            l10n::text(
+                "凭据存储暂时不可用",
+                "Credential storage lock is unavailable",
+            )
+        })?;
+        let result = credentials::set_relay_kind(&self.context, params)?;
+        self.account_changed("relay");
+        Ok(result)
+    }
     /// Removes a relay added by hand.
     pub fn remove_relay_source(&self, params: &Value) -> Result<Value, String> {
         let _guard = self.credential_lock.lock().map_err(|_| {
