@@ -482,8 +482,10 @@ mod tests {
                 ],
             ),
         );
-        host.secrets
-            .insert(ACCESS_TOKEN_SECRET.into(), Answer::Found(format!("{access}\n")));
+        host.secrets.insert(
+            ACCESS_TOKEN_SECRET.into(),
+            Answer::Found(format!("{access}\n")),
+        );
         let host = host.answer(SUMMARY, Ok(summary()));
         let reading = read(&host).unwrap();
         let account = reading.account.as_ref().unwrap();

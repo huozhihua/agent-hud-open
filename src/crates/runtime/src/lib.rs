@@ -199,12 +199,16 @@ impl Runtime {
     }
     /// The native product host, never an RPC payload, supplies its approved fixed executable.
     pub fn delegate_hook_owner(&mut self, canonical_executable: PathBuf) -> Result<(), String> {
+        // install::canonical requires executable == fixed path; resolve both the
+        // same way so a canonicalized Applications path is not rejected.
+        let executable = canonical_executable
+            .canonicalize()
+            .unwrap_or(canonical_executable);
         let context = hooks::InstallContext {
             home: self.platform.home_dir().to_owned(),
             environment: std::env::vars().collect(),
-            executable: std::env::current_exe()
-                .map_err(|_| "The application executable is unavailable")?,
-            canonical_executable: Some(canonical_executable),
+            executable: executable.clone(),
+            canonical_executable: Some(executable),
         };
         let mut hooks = self.hooks.lock().unwrap_or_else(|p| p.into_inner());
         hooks.delegate_owner(context)?;
