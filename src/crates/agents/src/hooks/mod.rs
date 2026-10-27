@@ -84,6 +84,8 @@ pub struct Handler {
 
 /// The permission hook.
 pub struct Permission {
+    /// Client hook event names this permission flag installs under.
+    pub events: &'static [&'static str],
     /// How long the client waits for a reply, in its own unit.
     pub timeout: u64,
     /// Tools whose question or plan cannot be answered from here; their
@@ -99,6 +101,11 @@ pub struct Permission {
     /// Its transcript shows a request answered in the client's own window,
     /// so the host stops waiting for the HUD's answer once it does.
     pub settles_in_transcript: bool,
+    /// When true, installed Handlers entries set `failClosed` so a hook
+    /// failure blocks the action instead of failing open.
+    pub fail_closed: bool,
+    /// Optional `matcher` values keyed by event name for Handlers installs.
+    pub event_matchers: &'static [(&'static str, &'static str)],
     /// A run nobody watches, whose requests stay with the client.
     pub unattended: Option<crate::process::UnattendedRule>,
     pub reply: Reply,
@@ -110,6 +117,8 @@ pub enum Reply {
     HookSpecificOutput,
     /// `{"decision": "approve" | "block"}`.
     Decision,
+    /// Cursor gate hooks: `{"permission": "allow" | "deny", "user_message"?: …}`.
+    CursorPermission,
 }
 
 /// The completion hook.

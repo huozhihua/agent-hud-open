@@ -1,8 +1,22 @@
-//! Cursor's completion hook, in its version-1 settings.
-use crate::hooks::{Completed, Completion, Handler, Hooks, Layout, POSIX_ONLY};
+//! Cursor's completion and gate-permission hooks, in its version-1 settings.
+use crate::hooks::{Completed, Completion, Handler, Hooks, Layout, Permission, Reply, POSIX_ONLY};
 use crate::text;
 use crate::{Location, Usage};
 use serde_json::Value;
+
+/// Cursor Agent gate events installed under `--permission-hook`.
+const PERMISSION_EVENTS: &[&str] = &[
+    "beforeShellExecution",
+    "beforeMCPExecution",
+    "beforeReadFile",
+    "preToolUse",
+    "subagentStart",
+];
+
+/// `preToolUse` covers tools that lack a dedicated before* gate; Shell/Read/MCP
+/// already fire their own events and must not double-prompt.
+const PRE_TOOL_USE_MATCHER: &str =
+    "Write|Edit|Delete|Task|Grep|Glob|WebFetch|WebSearch|NotebookEdit|MultiEdit";
 
 pub static HOOKS: Hooks = Hooks {
     settings: Some(Location::home(&[], &[".cursor"], "hooks.json")),
@@ -12,7 +26,19 @@ pub static HOOKS: Hooks = Hooks {
         typed: false,
         timeout_key: "timeout",
     }),
-    permission: None,
+    permission: Some(Permission {
+        events: PERMISSION_EVENTS,
+        timeout: 300,
+        unanswerable: &[],
+        rules: true,
+        plans: false,
+        reviewer_gate: false,
+        settles_in_transcript: false,
+        fail_closed: true,
+        event_matchers: &[("preToolUse", PRE_TOOL_USE_MATCHER)],
+        unattended: None,
+        reply: Reply::CursorPermission,
+    }),
     completion: Some(Completion {
         event: "stop",
         timeout: 5,
@@ -135,5 +161,15 @@ mod tests {
                 .usage
                 .is_none()
         );
+    }
+
+    #[test]
+    fn permission_covers_cursor_gate_events() {
+        let permission = HOOKS.permission.as_ref().unwrap();
+        assert!(permission.events.contains(&"beforeShellExecution"));
+        assert!(permission.events.contains(&"preToolUse"));
+        assert!(matches!(permission.reply, Reply::CursorPermission));
+        assert!(permission.fail_closed);
+        assert_eq!(permission.timeout, 300);
     }
 }

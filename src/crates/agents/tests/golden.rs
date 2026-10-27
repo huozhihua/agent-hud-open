@@ -328,7 +328,7 @@ impl Pair {
     fn layout(&self) -> Layout {
         match (self.source.as_str(), self.flag) {
             ("antigravity", _) => Layout::Entry,
-            ("cursor" | "copilot", "--completion-hook") => Layout::Flat,
+            ("cursor" | "copilot", "--completion-hook" | "--permission-hook") => Layout::Flat,
             ("zcode", _) => Layout::Nested,
             _ => Layout::Grouped,
         }
@@ -716,10 +716,11 @@ fn flat_scenarios(pair: &Pair) -> Vec<(String, Value)> {
     let copilot = pair.source == "copilot";
     let key = if copilot { "bash" } else { "command" };
     let event = pair.first().to_owned();
-    let other_event = if copilot {
-        "sessionStart"
-    } else {
-        "beforeShellExecution"
+    let other_event = match (copilot, event.as_str()) {
+        (true, _) => "sessionStart",
+        (_, "beforeShellExecution") => "afterAgentResponse",
+        (_, "stop") => "beforeShellExecution",
+        _ => "afterAgentResponse",
     };
     let entry = |command: &str| -> Value {
         if copilot {
@@ -935,7 +936,6 @@ fn patches(golden: &mut Golden) {
         ("claude", "--completion-hook"),
         ("claude", "--unknown-hook"),
         ("codex", "--attention-hook"),
-        ("cursor", "--permission-hook"),
     ] {
         let current = json!({"hooks": {}});
         let own = command(EXE, flag, source);
@@ -2000,6 +2000,45 @@ fn requests(golden: &mut Golden) {
             );
         }
     }
+    for (name, payload) in [
+        ("shell", cursor_shell_permission()),
+        (
+            "read-file",
+            json!({
+                "conversation_id": "cursor-sess-1",
+                "hook_event_name": "beforeReadFile",
+                "file_path": "/Users/me/project/src/main.rs",
+                "cwd": "/Users/me/project",
+            }),
+        ),
+        (
+            "pre-tool-write",
+            json!({
+                "conversation_id": "cursor-sess-1",
+                "hook_event_name": "preToolUse",
+                "tool_name": "Write",
+                "tool_input": {"file_path": "/Users/me/project/out.txt", "content": "hi"},
+                "cwd": "/Users/me/project",
+            }),
+        ),
+        (
+            "subagent-start",
+            json!({
+                "conversation_id": "cursor-sess-1",
+                "hook_event_name": "subagentStart",
+                "task": "Explore the auth flow",
+                "cwd": "/Users/me/project",
+            }),
+        ),
+    ] {
+        request_case(
+            golden,
+            format!("request/cursor/{name}"),
+            "cursor",
+            &payload,
+            None,
+        );
+    }
     let codex_patch = with(
         tool_payload(
             "apply_patch",
@@ -2189,9 +2228,21 @@ fn completion_payload(source: &str) -> Value {
     }
 }
 
+/// Cursor beforeShellExecution gate payload for permission golden cases.
+fn cursor_shell_permission() -> Value {
+    json!({
+        "conversation_id": "cursor-sess-1",
+        "generation_id": "gen-1",
+        "hook_event_name": "beforeShellExecution",
+        "command": "ls",
+        "cwd": "/Users/me/project",
+    })
+}
+
 /// One representative payload per flag (per client for completions).
 fn event_payload(source: &str, flag: &str) -> Value {
     match flag {
+        "--permission-hook" if source == "cursor" => cursor_shell_permission(),
         "--permission-hook" => tool_payload("Bash", json!({"command": "ls"})),
         "--completion-hook" => completion_payload(source),
         "--attention-hook" => notification(),

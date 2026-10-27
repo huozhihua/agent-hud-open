@@ -225,6 +225,11 @@ fn serve(
     {
         return;
     }
+    if let Some(response) = agent_hud_agents::auto_allow_response(&request) {
+        let _ = serde_json::to_writer(&mut stream, &response);
+        let _ = stream.write_all(b"\n");
+        return;
+    }
     reminders.record(source, flag, payload);
     let ticket = requests.register(request, now_ms());
     loop {

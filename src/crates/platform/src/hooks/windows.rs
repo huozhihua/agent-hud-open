@@ -37,6 +37,9 @@ impl Server {
                 {
                     return None;
                 }
+                if let Some(response) = agent_hud_agents::auto_allow_response(&request) {
+                    return Some(response);
+                }
                 reminders.record(source, flag, payload);
                 let ticket = requests.register(request, now_ms());
                 let response = loop {

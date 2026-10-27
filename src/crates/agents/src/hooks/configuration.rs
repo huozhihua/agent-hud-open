@@ -1,4 +1,4 @@
-use super::{hooks_of, Hooks, Layout};
+use super::{hooks_of, Handler, Hooks, Layout};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
@@ -15,7 +15,11 @@ pub struct HookConfiguration {
 pub fn configuration(source_name: &str, flag: &str) -> Result<HookConfiguration, String> {
     let (source, hooks) = hooks_of(source_name)?;
     let events: Vec<&str> = match flag {
-        "--permission-hook" if hooks.permission.is_some() => vec!["PermissionRequest"],
+        "--permission-hook" if hooks.permission.is_some() => hooks
+            .permission
+            .iter()
+            .flat_map(|hook| hook.events.iter().copied())
+            .collect(),
         "--completion-hook" if hooks.completion.is_some() => {
             hooks.completion.iter().map(|hook| hook.event).collect()
         }
@@ -166,6 +170,70 @@ fn timeout(hooks: &Hooks, flag: &str) -> u64 {
     }
     .unwrap_or(5)
 }
+
+/// Whether Handlers permission entries should fail closed.
+fn fail_closed(hooks: &Hooks, flag: &str) -> bool {
+    flag == "--permission-hook"
+        && hooks
+            .permission
+            .as_ref()
+            .is_some_and(|permission| permission.fail_closed)
+}
+
+/// Matcher string for a Handlers event, when the permission descriptor names one.
+fn event_matcher<'a>(hooks: &'a Hooks, flag: &str, event: &str) -> Option<&'a str> {
+    if flag != "--permission-hook" {
+        return None;
+    }
+    hooks.permission.as_ref().and_then(|permission| {
+        permission
+            .event_matchers
+            .iter()
+            .find(|(name, _)| *name == event)
+            .map(|(_, matcher)| *matcher)
+    })
+}
+
+/// Apply timeout / failClosed / matcher policy onto an owned Handlers entry.
+fn apply_handler_policy(
+    hooks: &Hooks,
+    flag: &str,
+    handler: &Handler,
+    event: &str,
+    entry: &mut Value,
+) {
+    let Some(fields) = entry.as_object_mut() else {
+        return;
+    };
+    fields.insert(handler.timeout_key.into(), json!(timeout(hooks, flag)));
+    if fail_closed(hooks, flag) {
+        fields.insert("failClosed".into(), json!(true));
+    } else {
+        fields.remove("failClosed");
+    }
+    match event_matcher(hooks, flag, event) {
+        Some(matcher) => {
+            fields.insert("matcher".into(), json!(matcher));
+        }
+        None => {
+            fields.remove("matcher");
+        }
+    }
+}
+
+/// Build a new Handlers-layout hook entry for `command`.
+fn new_handler(hooks: &Hooks, flag: &str, handler: &Handler, event: &str, command: &str) -> Value {
+    let mut new = Map::new();
+    if handler.typed {
+        new.insert("type".into(), json!("command"));
+    }
+    new.insert(handler.command_key.into(), json!(command));
+    new.insert(handler.timeout_key.into(), json!(timeout(hooks, flag)));
+    let mut entry = Value::Object(new);
+    apply_handler_policy(hooks, flag, handler, event, &mut entry);
+    entry
+}
+
 fn new_group(hooks: &Hooks, flag: &str, command: &str) -> Value {
     let mut handler = json!({"type":"command","command":command,"timeout":timeout(hooks, flag)});
     for (key, value) in fixed(flag) {
@@ -298,27 +366,28 @@ pub fn patch_configuration(
         if root.get("version").is_some_and(|v| v != &json!(1)) {
             return Err("Unsupported hook configuration version".into());
         }
-        let event = &desc.events[0];
-        let handlers = optional_array(&hooks_object, event)?;
         let key = handler.command_key;
-        let mut placed = false;
-        let mut result =
-            setting_handlers(handlers, (source, hooks, flag), key, command, &mut placed);
-        if let Some(command) = command {
-            if !placed {
-                let mut new = Map::new();
-                if handler.typed {
-                    new.insert("type".into(), json!("command"));
+        for event in &desc.events {
+            let handlers = optional_array(&hooks_object, event)?;
+            let mut placed = false;
+            let mut result =
+                setting_handlers(handlers, (source, hooks, flag), key, command, &mut placed);
+            if let Some(command) = command {
+                if !placed {
+                    result.push(new_handler(hooks, flag, handler, event, command));
+                } else {
+                    for entry in &mut result {
+                        if owns(entry[key].as_str(), source, hooks, flag) {
+                            apply_handler_policy(hooks, flag, handler, event, entry);
+                        }
+                    }
                 }
-                new.insert(key.into(), json!(command));
-                new.insert(handler.timeout_key.into(), json!(timeout(hooks, flag)));
-                result.push(Value::Object(new));
             }
-        }
-        if result.is_empty() {
-            hooks_object.remove(event);
-        } else {
-            hooks_object.insert(event.clone(), Value::Array(result));
+            if result.is_empty() {
+                hooks_object.remove(event);
+            } else {
+                hooks_object.insert(event.clone(), Value::Array(result));
+            }
         }
         root.insert("hooks".into(), Value::Object(hooks_object));
         root.insert("version".into(), json!(1));
