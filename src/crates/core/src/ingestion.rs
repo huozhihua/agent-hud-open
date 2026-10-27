@@ -1318,6 +1318,12 @@ impl LogSession for Log {
         if let Some(facts) = self.live.facts(&self.id, &self.source, now, subagents_at) {
             session["liveFacts"] = facts;
         }
+        checkpoints::note_unmetered(
+            &mut session,
+            &self.model,
+            !self.messages.is_empty(),
+            self.usage.total(),
+        );
         session
     }
 }

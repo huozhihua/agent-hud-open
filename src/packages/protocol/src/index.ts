@@ -120,6 +120,11 @@ export interface Session {
   state: SessionState;
   /** From Core: the session's tokens with its sub-agents' at any depth (decided 2026-10-21, as Open); a sub-agent's own row still counts once in every total. */
   tokens: number;
+  /**
+   * From Core: `unavailable` when this log recorded no usage event.
+   * `tokens: 0` is then not a measured share of the parent. Absent when usage was recorded.
+   */
+  usageStatus?: "unavailable";
   turnCount?: number | null;
   /** From Core, on the Sessions page's rows (`turnBars: true`): the newest turns a row draws. */
   turnBars?: SessionTurnBars;
@@ -391,7 +396,7 @@ export interface Approval {
   removed?: string | null;
   added?: string | null;
   suggestions?: unknown[];
-  /** From Core: what Always trusts, as text (a command prefix, path, MCP tool, or a website). */}
+  /** From Core: what Always trusts, as text (a command prefix, path, MCP tool, or a website). */
   alwaysAllowRule?: string | null;
   /** From Core: the allow button's words where they are not "Allow once",
    * such as "Allow this conversation" for a native approval kept per session. */

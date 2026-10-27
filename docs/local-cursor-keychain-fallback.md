@@ -15,7 +15,7 @@
 ## 背景
 
 1. 较新的 Cursor 会把 `state.vscdb` 里的 `cursorAuth/accessToken` 写成 `cursor-safe-storage:v1:…` 密文，额度读取失败。
-2. Cursor 会话列表来自数据库，但 **会话 Token 只来自 `stop` completion hook**；预览入口未委托固定可执行文件时不会安装 `~/.cursor/hooks.json`，Token 恒为 0。
+2. Cursor 会话列表来自数据库，但 **会话 Token 只来自 `stop` completion hook**；预览入口未委托固定可执行文件时不会安装 `~/.cursor/hooks.json`，Token 恒为 0。子 agent 的 composer 往往没有自己的 `stop` 行（用量记在父会话的 `conversation_id` 上）。会话详情不把这显示成 0%，也不把父用量拆给子会话。
 3. Cursor **没有** Claude 式 `PermissionRequest`；要在 Agent HUD Next 上点同意，需用 Cursor 原生 gate hooks 挂起等待 HUD。
 
 明文 JWT 仍在 macOS 钥匙串：`service=cursor-access-token`。
@@ -89,7 +89,7 @@ Shell 前缀（对齐 Cursor `terminalAllowlist` 的前缀精神，不把整个 
 - 将 App 装到 `/Applications`（或其它稳定 `.app` 路径），不要长期从 dmg 卷内直接跑。
 - 设置 → 打开「客户端回调」；Cursor ≥ 3.27。
 - 去隔离标记：`xattr -dr com.apple.quarantine "/Applications/Agent HUD Next.app"`
-- 历史会话无 Token；安装 hook 之后的新会话才会有。
+- 历史会话无 Token；安装 hook 之后的新会话才会有。子 agent 的 Token 今天不能从本地 `stop` hook 单独拿到，详情里写「用量未单独上报」，父会话合计保持原样。
 - 授权：Cursor Agent 触发工具时 HUD 出卡。Shell 点 Always 只信任该命令前缀（例如 `git status`），不是所有 Shell。同一工作区里前缀命中的后续命令（含新对话、重启 Next）不再弹；别的前缀、别的路径、别的 MCP 工具、别的工作区仍弹。清信任可删 `workspace-always.json`。
 
 ## 私有仓库

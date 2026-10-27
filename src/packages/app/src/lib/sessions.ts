@@ -1,5 +1,6 @@
 // How the Statistics window names a session's client and place, as
 // agent-hud-native-open's session list (SessionCard) and session page do.
+import { share } from "@agent-hud/ui/format";
 
 interface ClientFacts {
   source: string;
@@ -10,6 +11,48 @@ interface PlaceFacts {
   model: string;
   modelName?: string | null;
   cwd: string | null;
+}
+
+/** A placeholder model: Cursor headers hard-coded this, and an unnamed call still can. */
+const PLACEHOLDER_MODEL = "Unknown";
+
+/**
+ * The model a person should read. Skips an empty or placeholder name, then
+ * the parent session's model when this session never named one. "—" when
+ * nobody did.
+ */
+export function displayModel(
+  ...sources: (
+    { model?: string | null; modelName?: string | null } | null | undefined
+  )[]
+): string {
+  for (const source of sources) {
+    const name = (source?.modelName || source?.model || "").trim();
+    if (name && name !== PLACEHOLDER_MODEL) return name;
+  }
+  return "—";
+}
+
+/** A child with no usage event is not a measured 0% of its parent. */
+export function subagentUsageReported(child: {
+  tokens: number;
+  usageStatus?: string | null;
+}): boolean {
+  return !(child.tokens === 0 && child.usageStatus === "unavailable");
+}
+
+/** The share line for one sub-agent: a real share, or the unreported sentence. */
+export function subagentUsageNote(
+  child: { tokens: number; usageStatus?: string | null },
+  total: number,
+  zh: boolean,
+): string {
+  if (!subagentUsageReported(child)) {
+    return zh
+      ? "用量未单独上报，可能已计入父会话"
+      : "Not reported separately; may be in the parent";
+  }
+  return share(child.tokens, total);
 }
 
 /**
@@ -33,7 +76,7 @@ export function sessionClient(
  * people read it, then the session's folder, else its client.
  */
 export function sessionPlace(session: PlaceFacts, client: string): string[] {
-  return [session.modelName || session.model || "—", session.cwd || client];
+  return [displayModel(session), session.cwd || client];
 }
 
 /**
@@ -45,11 +88,9 @@ export function sessionWhere(
   session: PlaceFacts & { project?: string | null },
   client: string,
 ): string[] {
-  return [
-    session.modelName || session.model || "—",
-    session.project || session.cwd,
-    client,
-  ].filter((part): part is string => Boolean(part));
+  return [displayModel(session), session.project || session.cwd, client].filter(
+    (part): part is string => Boolean(part),
+  );
 }
 
 /**

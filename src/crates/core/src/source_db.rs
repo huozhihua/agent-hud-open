@@ -328,7 +328,9 @@ impl AgentHudCore {
                 .next()
                 .unwrap_or(&record.model)
                 .to_owned();
-            if clean_model != "Unknown" || log.model == "Unknown" {
+            // Empty and "Unknown" are placeholders (Cursor headers carry no
+            // model). They must not replace a model a turn already named.
+            if !clean_model.is_empty() && clean_model != "Unknown" {
                 log.model = clean_model;
             }
             if (is_batch || stamp.source == "antigravity")

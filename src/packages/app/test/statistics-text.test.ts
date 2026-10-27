@@ -2,10 +2,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { listCost } from "@agent-hud/ui/format";
 import {
+  displayModel,
   sessionClient,
   sessionHelp,
   sessionKinds,
   sessionPlace,
+  subagentUsageNote,
+  subagentUsageReported,
 } from "../src/lib/sessions.ts";
 import { hourModels } from "../src/lib/statistics.ts";
 
@@ -80,6 +83,48 @@ test("a row's second line is the model, then the folder, else the client", () =>
     "—",
     "Codex CLI",
   ]);
+  assert.deepEqual(
+    sessionPlace(
+      { model: "Unknown", modelName: "Unknown", cwd: null },
+      "Cursor",
+    ),
+    ["—", "Cursor"],
+  );
+});
+
+test("a placeholder model is not shown, and a parent model is used when this session has none", () => {
+  assert.equal(displayModel({ model: "Unknown", modelName: "Unknown" }), "—");
+  assert.equal(displayModel({ model: "", modelName: null }), "—");
+  assert.equal(
+    displayModel(
+      { model: "", modelName: null },
+      { model: "grok-4.7", modelName: "grok-4.7" },
+    ),
+    "grok-4.7",
+  );
+  assert.equal(
+    displayModel({ model: "gpt-5", modelName: null }, { model: "grok-4.7" }),
+    "gpt-5",
+  );
+});
+
+test("a sub-agent with no usage event is not a 0% share", () => {
+  const child = { tokens: 0, usageStatus: "unavailable" as const };
+  assert.equal(subagentUsageReported(child), false);
+  assert.equal(
+    subagentUsageNote(child, 710, true),
+    "用量未单独上报，可能已计入父会话",
+  );
+  assert.equal(
+    subagentUsageNote(child, 710, false),
+    "Not reported separately; may be in the parent",
+  );
+  assert.equal(
+    subagentUsageReported({ tokens: 105, usageStatus: "unavailable" }),
+    true,
+    "tokens rolled up from a descendant are a real share",
+  );
+  assert.equal(subagentUsageNote({ tokens: 105 }, 710, false), "15%");
 });
 
 test("a row's tooltip is the title, the client and the folder", () => {
