@@ -3,13 +3,17 @@
 //! Sessions and their tokens are read on this Mac (`sessions.rs`, the turn
 //! log), never from the dashboard.
 use crate::account::{
-    account_id, legacy_account, locate, DatabaseFailure, Host, HttpFailure, HttpRequest, Reading,
+    account_id, legacy_account, locate, Answer, DatabaseFailure, Host, HttpFailure, HttpRequest,
+    Reading,
 };
 use crate::{l10n, Location, PerOs, Support};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use chrono::Utc;
 use serde_json::{json, Value};
 use std::time::Duration;
+
+/// Service name Cursor uses for its access token in the macOS login keychain.
+const ACCESS_TOKEN_SECRET: &str = "cursor-access-token";
 
 /// Cursor's state database, where it keeps its sign-in and chat headers.
 pub(crate) const STATE: Location =
@@ -57,7 +61,69 @@ pub(crate) struct SignIn {
     pub email: Option<String>,
 }
 
+/// Whether `token` looks like a three-part JWT (not Cursor's encrypted blob).
+fn jwt_shaped(token: &str) -> bool {
+    let mut parts = token.split('.');
+    parts.next().filter(|part| !part.is_empty()).is_some()
+        && parts.next().is_some()
+        && parts.next().is_some()
+        && parts.next().is_none()
+}
+
+/// Parse a Cursor access JWT into a sign-in, or name why it cannot be used.
+fn sign_in_from_jwt(token: String, email: Option<String>) -> Result<SignIn, String> {
+    if token.bytes().any(|byte| matches!(byte, 0 | b'\r' | b'\n')) {
+        return Err(auth_format());
+    }
+    let parts = token.split('.').collect::<Vec<_>>();
+    if parts.len() != 3 {
+        return Err(auth_format());
+    }
+    let claims: Value = URL_SAFE_NO_PAD
+        .decode(parts[1].trim_end_matches('='))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .ok_or_else(auth_format)?;
+    if !claims["exp"]
+        .as_f64()
+        .is_some_and(|expiry| expiry > Utc::now().timestamp() as f64 + 60.0)
+    {
+        return Err(l10n::text(
+            "Cursor 保存的登录已过期，请在 Cursor 中重新登录",
+            "Cursor's saved access token expired; sign in in Cursor to renew it.",
+        ));
+    }
+    let user = claims["sub"]
+        .as_str()
+        .and_then(|sub| sub.rsplit('|').next())
+        .filter(|user| {
+            !user.is_empty()
+                && user
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+        })
+        .ok_or_else(auth_format)?;
+    Ok(SignIn {
+        user: user.to_owned(),
+        token,
+        email,
+    })
+}
+
+/// Access token Cursor keeps in the OS credential store (macOS keychain).
+fn keychain_access_token(host: &dyn Host) -> Option<String> {
+    match host.secret(ACCESS_TOKEN_SECRET) {
+        Answer::Found(value) => {
+            let value = value.trim();
+            (!value.is_empty()).then(|| value.to_owned())
+        }
+        _ => None,
+    }
+}
+
 /// The sign-in Cursor keeps in its database; None where Cursor is not here.
+/// When the database row is encrypted at rest (`cursor-safe-storage:…`), the
+/// plaintext JWT is read from the login keychain instead.
 pub(crate) fn sign_in(host: &dyn Host) -> Result<Option<SignIn>, String> {
     let Ok(database) = locate(host, &DATABASE) else {
         return Ok(None);
@@ -96,49 +162,27 @@ pub(crate) fn sign_in(host: &dyn Host) -> Result<Option<SignIn>, String> {
             })
             .transpose()
     };
-    let Some(token) = lookup("cursorAuth/accessToken")?.filter(|token| !token.is_empty()) else {
-        return Err(l10n::text(
+    let email = lookup("cursorAuth/cachedEmail")?.filter(|email| !email.trim().is_empty());
+    let db_token = lookup("cursorAuth/accessToken")?.filter(|token| !token.is_empty());
+    let not_signed_in = || {
+        l10n::text(
             "登录 Cursor 后读取账户用量",
             "Sign in to Cursor to read its account usage.",
-        ));
+        )
     };
-    let email = lookup("cursorAuth/cachedEmail")?.filter(|email| !email.trim().is_empty());
-    if token.bytes().any(|byte| matches!(byte, 0 | b'\r' | b'\n')) {
+    // Prefer a plaintext JWT in Cursor's database. Newer Cursor builds store
+    // an encrypted blob there; the usable token then lives in the keychain.
+    let had_db_token = db_token.is_some();
+    if let Some(token) = db_token.filter(|token| jwt_shaped(token)) {
+        return Ok(Some(sign_in_from_jwt(token, email)?));
+    }
+    if let Some(token) = keychain_access_token(host) {
+        return Ok(Some(sign_in_from_jwt(token, email)?));
+    }
+    if had_db_token {
         return Err(auth_format());
     }
-    let parts = token.split('.').collect::<Vec<_>>();
-    if parts.len() != 3 {
-        return Err(auth_format());
-    }
-    let claims: Value = URL_SAFE_NO_PAD
-        .decode(parts[1].trim_end_matches('='))
-        .ok()
-        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-        .ok_or_else(auth_format)?;
-    if !claims["exp"]
-        .as_f64()
-        .is_some_and(|expiry| expiry > Utc::now().timestamp() as f64 + 60.0)
-    {
-        return Err(l10n::text(
-            "Cursor 保存的登录已过期，请在 Cursor 中重新登录",
-            "Cursor's saved access token expired; sign in in Cursor to renew it.",
-        ));
-    }
-    let user = claims["sub"]
-        .as_str()
-        .and_then(|sub| sub.rsplit('|').next())
-        .filter(|user| {
-            !user.is_empty()
-                && user
-                    .bytes()
-                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
-        })
-        .ok_or_else(auth_format)?;
-    Ok(Some(SignIn {
-        user: user.to_owned(),
-        token,
-        email,
-    }))
+    Err(not_signed_in())
 }
 
 pub fn read(host: &dyn Host) -> Result<Reading, String> {
@@ -416,5 +460,59 @@ mod tests {
         let mut odd = FakeHost::new("/u");
         odd.databases.insert(DB.into(), path);
         assert_eq!(read(&odd).err().unwrap(), database_format());
+    }
+
+    #[test]
+    fn encrypted_database_token_falls_back_to_the_keychain() {
+        use crate::account::Answer;
+
+        let dir = tempfile::tempdir().unwrap();
+        let access = token(3600);
+        let mut host = FakeHost::new("/u");
+        host.databases.insert(
+            DB.into(),
+            database(
+                &dir,
+                &[
+                    (
+                        "cursorAuth/accessToken",
+                        "cursor-safe-storage:v1:djEwhUTs9+Ox49XsaQ",
+                    ),
+                    ("cursorAuth/cachedEmail", "me@example.com"),
+                ],
+            ),
+        );
+        host.secrets
+            .insert(ACCESS_TOKEN_SECRET.into(), Answer::Found(format!("{access}\n")));
+        let host = host.answer(SUMMARY, Ok(summary()));
+        let reading = read(&host).unwrap();
+        let account = reading.account.as_ref().unwrap();
+        assert_eq!(account["label"], "me@example.com");
+        assert_eq!(account["plan"], "pro");
+        let sent = host.sent.borrow();
+        assert_eq!(
+            sent[0].0,
+            [(
+                "Cookie".to_owned(),
+                format!("WorkosCursorSessionToken=user_123%3A%3A{access}")
+            )]
+        );
+    }
+
+    #[test]
+    fn encrypted_token_without_keychain_is_an_unsupported_format() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut host = FakeHost::new("/u");
+        host.databases.insert(
+            DB.into(),
+            database(
+                &dir,
+                &[(
+                    "cursorAuth/accessToken",
+                    "cursor-safe-storage:v1:djEwhUTs9+Ox49XsaQ",
+                )],
+            ),
+        );
+        assert_eq!(read(&host).err().unwrap(), auth_format());
     }
 }
