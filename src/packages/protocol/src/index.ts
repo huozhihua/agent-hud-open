@@ -391,7 +391,7 @@ export interface Approval {
   removed?: string | null;
   added?: string | null;
   suggestions?: unknown[];
-  /** From Core: what always allowing adds, as text (a rule, or a website). */
+  /** From Core: what Always trusts, as text (a command prefix, path, MCP tool, or a website). */}
   alwaysAllowRule?: string | null;
   /** From Core: the allow button's words where they are not "Allow once",
    * such as "Allow this conversation" for a native approval kept per session. */

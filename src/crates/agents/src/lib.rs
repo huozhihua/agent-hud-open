@@ -64,7 +64,10 @@ pub use hooks::configuration::{
 };
 pub use hooks::events::{enrich_codebuddy_completion, parse_event, HookEvent};
 pub use hooks::observer::parse_observation;
-pub use hooks::request::{auto_allow_response, parse_request, Request};
+pub use hooks::request::{
+    auto_allow_response, load_workspace_always, parse_request, set_workspace_always_persister,
+    workspace_always_snapshot, Request, WorkspaceAlwaysRule,
+};
 pub use hooks::windows::{patch_configuration_for_windows, windows_hook_handler};
 
 /// The clients with a permission hook, from their descriptors (see the test).

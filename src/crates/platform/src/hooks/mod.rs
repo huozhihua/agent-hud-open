@@ -7,6 +7,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+mod always;
 mod clients;
 mod completion;
 mod endpoint;
@@ -70,6 +71,7 @@ impl Hooks {
             wake();
         });
         let inbox = Some(inbox::Inbox::new(&data, wake.clone())?);
+        always::install(&data);
         Ok(Self {
             observers: Mutex::new(None),
             antigravity: None,
@@ -146,8 +148,10 @@ impl Hooks {
             self.deepseek.take();
             self.desktop.take();
             self.server.take();
+            always::uninstall();
             return Ok(());
         }
+        always::install(&self.data);
         if self.is_listening() {
             return Ok(());
         }

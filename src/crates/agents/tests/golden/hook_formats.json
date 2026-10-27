@@ -50832,7 +50832,8 @@
         ],
         "summary": "Which database should the service use?",
         "toolName": "AskUserQuestion",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -51460,7 +51461,8 @@
         ],
         "summary": "ask_user_question",
         "toolName": "ask_user_question",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -51677,7 +51679,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -51905,7 +51908,8 @@
         ],
         "summary": "Add a login page",
         "toolName": "ExitPlanMode",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -52136,7 +52140,8 @@
         ],
         "summary": "exit_plan_mode",
         "toolName": "exit_plan_mode",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -52505,7 +52510,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -52739,7 +52745,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -53021,7 +53028,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -53190,7 +53198,8 @@
         ],
         "summary": "Review the diff",
         "toolName": "Agent",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -53349,7 +53358,8 @@
         ],
         "summary": "Update main",
         "toolName": "apply_patch",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -53507,7 +53517,8 @@
         ],
         "summary": "Apply file changes",
         "toolName": "apply_patch",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -53663,7 +53674,8 @@
         ],
         "summary": "Bash",
         "toolName": "Bash",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -53821,7 +53833,8 @@
         ],
         "summary": "echo aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "toolName": "Bash",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -53979,7 +53992,8 @@
         ],
         "summary": "set -e\ncargo build\ncargo test",
         "toolName": "Bash",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -54137,7 +54151,8 @@
         ],
         "summary": "git push origin main",
         "toolName": "Bash",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -54295,7 +54310,8 @@
         ],
         "summary": "BashOutput",
         "toolName": "BashOutput",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -54458,7 +54474,8 @@
         ],
         "summary": "CustomTool",
         "toolName": "CustomTool",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -54614,7 +54631,8 @@
         ],
         "summary": "CustomTool",
         "toolName": "CustomTool",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -54770,7 +54788,8 @@
         ],
         "summary": "CustomTool",
         "toolName": "CustomTool",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -54931,7 +54950,8 @@
         ],
         "summary": "app.ts",
         "toolName": "Edit",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -55091,7 +55111,8 @@
         ],
         "summary": "Edit",
         "toolName": "Edit",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -55251,7 +55272,8 @@
         ],
         "summary": "app.ts",
         "toolName": "Edit",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -55410,7 +55432,8 @@
         ],
         "summary": "app.ts",
         "toolName": "Edit",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -55568,7 +55591,8 @@
         ],
         "summary": "Tool call",
         "toolName": "",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -55704,7 +55728,8 @@
         ],
         "summary": "src/**/*.ts",
         "toolName": "Glob",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -55862,7 +55887,8 @@
         ],
         "summary": "Glob",
         "toolName": "Glob",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -56021,7 +56047,8 @@
         ],
         "summary": "TODO",
         "toolName": "Grep",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -56179,7 +56206,8 @@
         ],
         "summary": "KillShell",
         "toolName": "KillShell",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -56338,7 +56366,8 @@
         ],
         "summary": "github · create_issue",
         "toolName": "mcp__github__create_issue",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -56494,7 +56523,8 @@
         ],
         "summary": "mcp__solo",
         "toolName": "mcp__solo",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -56662,7 +56692,8 @@
         ],
         "summary": "app.ts",
         "toolName": "MultiEdit",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -56821,7 +56852,8 @@
         ],
         "summary": "app.ts",
         "toolName": "MultiEdit",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -56978,7 +57010,8 @@
         ],
         "summary": "ls",
         "toolName": "Bash",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -57123,7 +57156,8 @@
         "suggestions": [],
         "summary": "Tool call",
         "toolName": null,
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -57249,7 +57283,8 @@
         ],
         "summary": "analysis.ipynb",
         "toolName": "NotebookEdit",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -57409,7 +57444,8 @@
         ],
         "summary": "Plan",
         "toolName": "ExitPlanMode",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -57571,7 +57607,8 @@
         ],
         "summary": "Add a login page",
         "toolName": "ExitPlanMode",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -57807,7 +57844,8 @@
         ],
         "summary": "Step one: prepare",
         "toolName": "ExitPlanMode",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -58040,7 +58078,8 @@
         ],
         "summary": "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp",
         "toolName": "ExitPlanMode",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -58269,7 +58308,8 @@
         ],
         "summary": "Plan",
         "toolName": "ExitPlanMode",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -58429,7 +58469,8 @@
         ],
         "summary": "Plan",
         "toolName": "ExitPlanMode",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -58589,7 +58630,8 @@
         ],
         "summary": "Plan",
         "toolName": "ExitPlanMode",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -58999,7 +59041,8 @@
         ],
         "summary": "Which?",
         "toolName": "AskUserQuestion",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -59589,7 +59632,8 @@
         ],
         "summary": "Which?",
         "toolName": "AskUserQuestion",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -60076,7 +60120,8 @@
         ],
         "summary": "Which?",
         "toolName": "AskUserQuestion",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -60659,7 +60704,8 @@
         ],
         "summary": "Which database should the service use?",
         "toolName": "AskUserQuestion",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -61256,7 +61302,8 @@
         ],
         "summary": "app.ts",
         "toolName": "Read",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -61414,7 +61461,8 @@
         ],
         "summary": "notes.txt",
         "toolName": "Read",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -61574,7 +61622,8 @@
         ],
         "summary": "Explore the codebase",
         "toolName": "Task",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -61732,7 +61781,8 @@
         ],
         "summary": "Task",
         "toolName": "Task",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -61878,7 +61928,8 @@
         "suggestions": [],
         "summary": "Tool call",
         "toolName": null,
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -62003,7 +62054,8 @@
         ],
         "summary": "ls",
         "toolName": "Bash",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -62162,7 +62214,8 @@
         ],
         "summary": "https://example.com/docs",
         "toolName": "WebFetch",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -62320,7 +62373,8 @@
         ],
         "summary": "WebFetch",
         "toolName": "WebFetch",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -62478,7 +62532,8 @@
         ],
         "summary": "rust serde untagged enums",
         "toolName": "WebSearch",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -62638,7 +62693,8 @@
         ],
         "summary": "WebSearch",
         "toolName": "WebSearch",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -62797,7 +62853,8 @@
         ],
         "summary": "README.md",
         "toolName": "Write",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -63124,7 +63181,8 @@
         "suggestions": [],
         "summary": "ask_user_question",
         "toolName": "ask_user_question",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -63307,7 +63365,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -63496,7 +63555,8 @@
         "suggestions": [],
         "summary": "exit_plan_mode",
         "toolName": "exit_plan_mode",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -63831,7 +63891,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -63987,7 +64048,8 @@
         "suggestions": [],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -64235,7 +64297,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -64592,7 +64655,8 @@
         "suggestions": [],
         "summary": "Which database should the service use?",
         "toolName": "AskUserQuestion",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -65174,7 +65238,8 @@
         "suggestions": [],
         "summary": "ask_user_question",
         "toolName": "ask_user_question",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -65357,7 +65422,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -65529,7 +65595,8 @@
         "suggestions": [],
         "summary": "Add a login page",
         "toolName": "ExitPlanMode",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -65641,7 +65708,8 @@
         "suggestions": [],
         "summary": "exit_plan_mode",
         "toolName": "exit_plan_mode",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -65856,7 +65924,8 @@
         "suggestions": [],
         "summary": "Apply file changes",
         "toolName": "apply_patch",
-        "turnId": "turn-7"
+        "turnId": "turn-7",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -66506,33 +66575,18 @@
         "requiresUserReviewer": false,
         "sessionId": "cursor:sess-1",
         "source": "cursor",
-        "suggestions": [
-          {
-            "behavior": "allow",
-            "destination": "session",
-            "rules": [
-              {
-                "ruleContent": "*",
-                "toolName": "AskUserQuestion"
-              }
-            ],
-            "type": "addRules"
-          }
-        ],
+        "suggestions": [],
         "summary": "Which database should the service use?",
         "toolName": "AskUserQuestion",
-        "turnId": null
+        "turnId": null,
+        "workspace": "/Users/me/project"
       },
       "responses": {
         "allow": {
           "permission": "allow"
         },
-        "always": {
-          "permission": "allow"
-        },
-        "always-unoffered-rule": {
-          "error": "Permission rule was not offered by this client"
-        },
+        "always": null,
+        "always-unoffered-rule": null,
         "answer-all": {
           "permission": "allow"
         },
@@ -66599,8 +66653,8 @@
       "roundTripStable": true,
       "view": {
         "added": null,
-        "allowsAlways": true,
-        "alwaysAllowRule": "AskUserQuestion(*)",
+        "allowsAlways": false,
+        "alwaysAllowRule": null,
         "answersPlan": false,
         "answersQuestion": true,
         "createdAt": "2025-10-09T08:53:20+00:00",
@@ -66654,19 +66708,7 @@
         "removed": null,
         "sessionId": "cursor:sess-1",
         "source": "cursor",
-        "suggestions": [
-          {
-            "behavior": "allow",
-            "destination": "session",
-            "rules": [
-              {
-                "ruleContent": "*",
-                "toolName": "AskUserQuestion"
-              }
-            ],
-            "type": "addRules"
-          }
-        ],
+        "suggestions": [],
         "summary": "Which database should the service use?",
         "title": "Which database should the service use?",
         "toolName": "AskUserQuestion",
@@ -66838,33 +66880,18 @@
         "requiresUserReviewer": false,
         "sessionId": "cursor:sess-1",
         "source": "cursor",
-        "suggestions": [
-          {
-            "behavior": "allow",
-            "destination": "session",
-            "rules": [
-              {
-                "ruleContent": "*",
-                "toolName": "ask_user_question"
-              }
-            ],
-            "type": "addRules"
-          }
-        ],
+        "suggestions": [],
         "summary": "ask_user_question",
         "toolName": "ask_user_question",
-        "turnId": null
+        "turnId": null,
+        "workspace": "/Users/me/project"
       },
       "responses": {
         "allow": {
           "permission": "allow"
         },
-        "always": {
-          "permission": "allow"
-        },
-        "always-unoffered-rule": {
-          "error": "Permission rule was not offered by this client"
-        },
+        "always": null,
+        "always-unoffered-rule": null,
         "answer-all": null,
         "answer-custom-not-string": null,
         "answer-custom-only": null,
@@ -66907,8 +66934,8 @@
       "roundTripStable": true,
       "view": {
         "added": null,
-        "allowsAlways": true,
-        "alwaysAllowRule": "ask_user_question(*)",
+        "allowsAlways": false,
+        "alwaysAllowRule": null,
         "answersPlan": false,
         "answersQuestion": false,
         "createdAt": "2025-10-09T08:53:20+00:00",
@@ -66923,19 +66950,7 @@
         "removed": null,
         "sessionId": "cursor:sess-1",
         "source": "cursor",
-        "suggestions": [
-          {
-            "behavior": "allow",
-            "destination": "session",
-            "rules": [
-              {
-                "ruleContent": "*",
-                "toolName": "ask_user_question"
-              }
-            ],
-            "type": "addRules"
-          }
-        ],
+        "suggestions": [],
         "summary": "ask_user_question",
         "title": "ask_user_question",
         "toolName": "ask_user_question",
@@ -67043,7 +67058,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": "/Users/me/project"
       },
       "responses": {
         "allow": {
@@ -67211,33 +67227,18 @@
         "requiresUserReviewer": false,
         "sessionId": "cursor:sess-1",
         "source": "cursor",
-        "suggestions": [
-          {
-            "behavior": "allow",
-            "destination": "session",
-            "rules": [
-              {
-                "ruleContent": "*",
-                "toolName": "ExitPlanMode"
-              }
-            ],
-            "type": "addRules"
-          }
-        ],
+        "suggestions": [],
         "summary": "Add a login page",
         "toolName": "ExitPlanMode",
-        "turnId": null
+        "turnId": null,
+        "workspace": "/Users/me/project"
       },
       "responses": {
         "allow": {
           "permission": "allow"
         },
-        "always": {
-          "permission": "allow"
-        },
-        "always-unoffered-rule": {
-          "error": "Permission rule was not offered by this client"
-        },
+        "always": null,
+        "always-unoffered-rule": null,
         "answer-unknown-question": null,
         "answer-without-answers": null,
         "approve-plan": null,
@@ -67270,8 +67271,8 @@
       "roundTripStable": true,
       "view": {
         "added": null,
-        "allowsAlways": true,
-        "alwaysAllowRule": "ExitPlanMode(*)",
+        "allowsAlways": false,
+        "alwaysAllowRule": null,
         "answersPlan": false,
         "answersQuestion": false,
         "createdAt": "2025-10-09T08:53:20+00:00",
@@ -67286,19 +67287,7 @@
         "removed": null,
         "sessionId": "cursor:sess-1",
         "source": "cursor",
-        "suggestions": [
-          {
-            "behavior": "allow",
-            "destination": "session",
-            "rules": [
-              {
-                "ruleContent": "*",
-                "toolName": "ExitPlanMode"
-              }
-            ],
-            "type": "addRules"
-          }
-        ],
+        "suggestions": [],
         "summary": "Add a login page",
         "title": "Add a login page",
         "toolName": "ExitPlanMode",
@@ -67342,33 +67331,18 @@
         "requiresUserReviewer": false,
         "sessionId": "cursor:sess-1",
         "source": "cursor",
-        "suggestions": [
-          {
-            "behavior": "allow",
-            "destination": "session",
-            "rules": [
-              {
-                "ruleContent": "*",
-                "toolName": "exit_plan_mode"
-              }
-            ],
-            "type": "addRules"
-          }
-        ],
+        "suggestions": [],
         "summary": "exit_plan_mode",
         "toolName": "exit_plan_mode",
-        "turnId": null
+        "turnId": null,
+        "workspace": "/Users/me/project"
       },
       "responses": {
         "allow": {
           "permission": "allow"
         },
-        "always": {
-          "permission": "allow"
-        },
-        "always-unoffered-rule": {
-          "error": "Permission rule was not offered by this client"
-        },
+        "always": null,
+        "always-unoffered-rule": null,
         "answer-unknown-question": null,
         "answer-without-answers": null,
         "approve-plan": null,
@@ -67401,8 +67375,8 @@
       "roundTripStable": true,
       "view": {
         "added": null,
-        "allowsAlways": true,
-        "alwaysAllowRule": "exit_plan_mode(*)",
+        "allowsAlways": false,
+        "alwaysAllowRule": null,
         "answersPlan": false,
         "answersQuestion": false,
         "createdAt": "2025-10-09T08:53:20+00:00",
@@ -67417,19 +67391,7 @@
         "removed": null,
         "sessionId": "cursor:sess-1",
         "source": "cursor",
-        "suggestions": [
-          {
-            "behavior": "allow",
-            "destination": "session",
-            "rules": [
-              {
-                "ruleContent": "*",
-                "toolName": "exit_plan_mode"
-              }
-            ],
-            "type": "addRules"
-          }
-        ],
+        "suggestions": [],
         "summary": "exit_plan_mode",
         "title": "exit_plan_mode",
         "toolName": "exit_plan_mode",
@@ -67538,7 +67500,7 @@
         "suggestions": [
           {
             "behavior": "allow",
-            "destination": "session",
+            "destination": "workspace",
             "rules": [
               {
                 "ruleContent": "/Users/me/project/out.txt",
@@ -67550,7 +67512,8 @@
         ],
         "summary": "out.txt",
         "toolName": "Write",
-        "turnId": null
+        "turnId": null,
+        "workspace": "/Users/me/project"
       },
       "responses": {
         "allow": {
@@ -67613,7 +67576,7 @@
         "suggestions": [
           {
             "behavior": "allow",
-            "destination": "session",
+            "destination": "workspace",
             "rules": [
               {
                 "ruleContent": "/Users/me/project/out.txt",
@@ -67664,7 +67627,7 @@
         "suggestions": [
           {
             "behavior": "allow",
-            "destination": "session",
+            "destination": "workspace",
             "rules": [
               {
                 "ruleContent": "/Users/me/project/src/main.rs",
@@ -67676,7 +67639,8 @@
         ],
         "summary": "main.rs",
         "toolName": "Read",
-        "turnId": null
+        "turnId": null,
+        "workspace": "/Users/me/project"
       },
       "responses": {
         "allow": {
@@ -67739,7 +67703,7 @@
         "suggestions": [
           {
             "behavior": "allow",
-            "destination": "session",
+            "destination": "workspace",
             "rules": [
               {
                 "ruleContent": "/Users/me/project/src/main.rs",
@@ -67830,7 +67794,7 @@
         "suggestions": [
           {
             "behavior": "allow",
-            "destination": "session",
+            "destination": "workspace",
             "rules": [
               {
                 "ruleContent": "ls",
@@ -67842,7 +67806,8 @@
         ],
         "summary": "ls",
         "toolName": "Shell",
-        "turnId": null
+        "turnId": null,
+        "workspace": "/Users/me/project"
       },
       "responses": {
         "allow": {
@@ -67905,7 +67870,7 @@
         "suggestions": [
           {
             "behavior": "allow",
-            "destination": "session",
+            "destination": "workspace",
             "rules": [
               {
                 "ruleContent": "ls",
@@ -67953,33 +67918,18 @@
         "requiresUserReviewer": false,
         "sessionId": "cursor:cursor-sess-1",
         "source": "cursor",
-        "suggestions": [
-          {
-            "behavior": "allow",
-            "destination": "session",
-            "rules": [
-              {
-                "ruleContent": "Explore the auth flow",
-                "toolName": "Task"
-              }
-            ],
-            "type": "addRules"
-          }
-        ],
+        "suggestions": [],
         "summary": "Explore the auth flow",
         "toolName": "Task",
-        "turnId": null
+        "turnId": null,
+        "workspace": "/Users/me/project"
       },
       "responses": {
         "allow": {
           "permission": "allow"
         },
-        "always": {
-          "permission": "allow"
-        },
-        "always-unoffered-rule": {
-          "error": "Permission rule was not offered by this client"
-        },
+        "always": null,
+        "always-unoffered-rule": null,
         "answer-unknown-question": null,
         "answer-without-answers": null,
         "approve-plan": null,
@@ -68012,8 +67962,8 @@
       "roundTripStable": true,
       "view": {
         "added": null,
-        "allowsAlways": true,
-        "alwaysAllowRule": "Task(Explore the auth flow)",
+        "allowsAlways": false,
+        "alwaysAllowRule": null,
         "answersPlan": false,
         "answersQuestion": false,
         "createdAt": "2025-10-09T08:53:20+00:00",
@@ -68028,19 +67978,7 @@
         "removed": null,
         "sessionId": "cursor:cursor-sess-1",
         "source": "cursor",
-        "suggestions": [
-          {
-            "behavior": "allow",
-            "destination": "session",
-            "rules": [
-              {
-                "ruleContent": "Explore the auth flow",
-                "toolName": "Task"
-              }
-            ],
-            "type": "addRules"
-          }
-        ],
+        "suggestions": [],
         "summary": "Explore the auth flow",
         "title": "Explore the auth flow",
         "toolName": "Task",
@@ -68514,7 +68452,8 @@
         ],
         "summary": "Add a login page",
         "toolName": "ExitPlanMode",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       }
     },
     "output": {
@@ -68552,7 +68491,8 @@
         ],
         "summary": "Add a login page",
         "toolName": "ExitPlanMode",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -68726,7 +68666,8 @@
         ],
         "summary": "Which database should the service use?",
         "toolName": "AskUserQuestion",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       }
     },
     "output": {
@@ -68801,7 +68742,8 @@
         ],
         "summary": "Which database should the service use?",
         "toolName": "AskUserQuestion",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -69024,7 +68966,8 @@
         ],
         "summary": "Which database should the service use?",
         "toolName": "AskUserQuestion",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       }
     },
     "output": {
@@ -69099,7 +69042,8 @@
         ],
         "summary": "Which database should the service use?",
         "toolName": "AskUserQuestion",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -69290,7 +69234,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       }
     },
     "output": {
@@ -69333,7 +69278,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -69460,7 +69406,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       }
     },
     "output": {
@@ -69503,7 +69450,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -69630,7 +69578,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       }
     },
     "output": {
@@ -69673,7 +69622,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -69799,7 +69749,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       }
     },
     "output": {
@@ -69842,7 +69793,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -69969,7 +69921,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       }
     },
     "output": {
@@ -70012,7 +69965,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -70122,7 +70076,8 @@
         "suggestions": "x",
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       }
     },
     "output": {
@@ -70370,7 +70325,8 @@
         "suggestions": [],
         "summary": "Which database should the service use?",
         "toolName": "AskUserQuestion",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -70659,7 +70615,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -70821,7 +70778,8 @@
         "suggestions": [],
         "summary": "Add a login page",
         "toolName": "ExitPlanMode",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -71165,7 +71123,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -71311,7 +71270,8 @@
         "suggestions": [],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -71549,7 +71509,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -71888,7 +71849,8 @@
         ],
         "summary": "ask_user_question",
         "toolName": "ask_user_question",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -72105,7 +72067,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -72350,7 +72313,8 @@
         ],
         "summary": "exit_plan_mode",
         "toolName": "exit_plan_mode",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -72791,7 +72755,8 @@
         ],
         "summary": "ask_user_question",
         "toolName": "ask_user_question",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -73008,7 +72973,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -73253,7 +73219,8 @@
         ],
         "summary": "exit_plan_mode",
         "toolName": "exit_plan_mode",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -73622,7 +73589,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -73856,7 +73824,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -74138,7 +74107,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -74487,7 +74457,8 @@
         ],
         "summary": "ask_user_question",
         "toolName": "ask_user_question",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -74704,7 +74675,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -74949,7 +74921,8 @@
         ],
         "summary": "exit_plan_mode",
         "toolName": "exit_plan_mode",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -75318,7 +75291,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -75552,7 +75526,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -75834,7 +75809,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -76183,7 +76159,8 @@
         ],
         "summary": "ask_user_question",
         "toolName": "ask_user_question",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -76400,7 +76377,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -76645,7 +76623,8 @@
         ],
         "summary": "exit_plan_mode",
         "toolName": "exit_plan_mode",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -77014,7 +76993,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -77248,7 +77228,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -77530,7 +77511,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -77879,7 +77861,8 @@
         ],
         "summary": "ask_user_question",
         "toolName": "ask_user_question",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -78096,7 +78079,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -78341,7 +78325,8 @@
         ],
         "summary": "exit_plan_mode",
         "toolName": "exit_plan_mode",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -78790,7 +78775,8 @@
         "suggestions": [],
         "summary": "Which database should the service use?",
         "toolName": "AskUserQuestion",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -79358,7 +79344,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -79530,7 +79517,8 @@
         "suggestions": [],
         "summary": "Add a login page",
         "toolName": "ExitPlanMode",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -79763,7 +79751,8 @@
         "suggestions": [],
         "summary": "Investigate",
         "toolName": "agent",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -79877,7 +79866,8 @@
         "suggestions": [],
         "summary": "a.py",
         "toolName": "edit",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -79989,7 +79979,8 @@
         "suggestions": [],
         "summary": "ls -la",
         "toolName": "exec",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -80101,7 +80092,8 @@
         "suggestions": [],
         "summary": "**/*.py",
         "toolName": "glob",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -80213,7 +80205,8 @@
         "suggestions": [],
         "summary": "XXX",
         "toolName": "grep",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -80325,7 +80318,8 @@
         "suggestions": [],
         "summary": "TODO",
         "toolName": "grep_search",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -80438,7 +80432,8 @@
         "suggestions": [],
         "summary": "n.ipynb",
         "toolName": "notebook_edit",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -80550,7 +80545,8 @@
         "suggestions": [],
         "summary": "a.py",
         "toolName": "read",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -80662,7 +80658,8 @@
         "suggestions": [],
         "summary": "a.py",
         "toolName": "read_file",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -80776,7 +80773,8 @@
         "suggestions": [],
         "summary": "a.py",
         "toolName": "replace",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -80888,7 +80886,8 @@
         "suggestions": [],
         "summary": "make",
         "toolName": "run_command",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -81001,7 +81000,8 @@
         "suggestions": [],
         "summary": "Run tests",
         "toolName": "run_shell_command",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -81113,7 +81113,8 @@
         "suggestions": [],
         "summary": "FIXME",
         "toolName": "search_file_content",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -81225,7 +81226,8 @@
         "suggestions": [],
         "summary": "Plan work",
         "toolName": "task",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -81337,7 +81339,8 @@
         "suggestions": [],
         "summary": "https://example.com",
         "toolName": "web_fetch",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -81449,7 +81452,8 @@
         "suggestions": [],
         "summary": "tokio select",
         "toolName": "web_search",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -81561,7 +81565,8 @@
         "suggestions": [],
         "summary": "https://example.org",
         "toolName": "webfetch",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -81674,7 +81679,8 @@
         "suggestions": [],
         "summary": "c.py",
         "toolName": "write",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -81787,7 +81793,8 @@
         "suggestions": [],
         "summary": "b.py",
         "toolName": "write_file",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -82470,7 +82477,8 @@
         "suggestions": [],
         "summary": "ask_user_question",
         "toolName": "ask_user_question",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -82653,7 +82661,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -82842,7 +82851,8 @@
         "suggestions": [],
         "summary": "exit_plan_mode",
         "toolName": "exit_plan_mode",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -83257,7 +83267,8 @@
         "suggestions": [],
         "summary": "Which database should the service use?",
         "toolName": "AskUserQuestion",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -83839,7 +83850,8 @@
         "suggestions": [],
         "summary": "ask_user_question",
         "toolName": "ask_user_question",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -84022,7 +84034,8 @@
         ],
         "summary": "Run the tests",
         "toolName": "Bash",
-        "turnId": "turn-1"
+        "turnId": "turn-1",
+        "workspace": null
       },
       "responses": {
         "allow": {
@@ -84211,7 +84224,8 @@
         "suggestions": [],
         "summary": "exit_plan_mode",
         "toolName": "exit_plan_mode",
-        "turnId": null
+        "turnId": null,
+        "workspace": null
       },
       "responses": {
         "allow": {
