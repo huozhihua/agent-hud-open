@@ -17,6 +17,12 @@
 1. 数据库里若是三段 JWT，行为与原来相同。
 2. 否则读取钥匙串 `cursor-access-token`，再请求 `https://cursor.com/api/usage-summary`。
 
+## 私有仓库
+
+- 仓库：https://github.com/huozhihua/agent-hud-open （private）
+- `origin` → 你的私有仓；`upstream` → `jazzenchen/agent-hud-open`
+- Release：https://github.com/huozhihua/agent-hud-open/releases/tag/v0.1.0-keychain1
+
 ## 构建产物
 
 ```text
