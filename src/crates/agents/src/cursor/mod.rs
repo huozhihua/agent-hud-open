@@ -1,4 +1,6 @@
 //! Cursor: sessions from its own database, tokens from its `stop` hook.
+//! Sub-agent composers often have no turn-log row; that usage stays on the
+//! parent and is not a measured zero.
 pub mod account;
 mod hooks;
 pub mod sessions;

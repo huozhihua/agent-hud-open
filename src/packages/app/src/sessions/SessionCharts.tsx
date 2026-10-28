@@ -740,6 +740,11 @@ export interface ShareRow {
   note?: string;
   color?: string;
   title?: string;
+  /**
+   * False when `value` is not a measured share (no usage event). The number
+   * and the bar are left out; `note` is the explanation.
+   */
+  measured?: boolean;
 }
 
 /**
@@ -760,6 +765,7 @@ export function ShareRows({
   return (
     <div style={{ display: "grid", gap: 7, minWidth: 0 }}>
       {rows.map((row) => {
+        const measured = row.measured !== false;
         const content = (
           <>
             <span
@@ -772,46 +778,50 @@ export function ShareRows({
               }}
             >
               <span style={{ ...clipped, flex: 1 }}>{row.label}</span>
-              <strong style={{ fontWeight: 600, ...numeric }}>
-                {compact(row.value)}
-              </strong>
+              {measured && (
+                <strong style={{ fontWeight: 600, ...numeric }}>
+                  {compact(row.value)}
+                </strong>
+              )}
               {row.note && (
                 <span
                   style={{
                     color: theme.secondary,
                     fontSize: 11,
-                    minWidth: 30,
+                    minWidth: measured ? 30 : 0,
                     textAlign: "right",
-                    ...numeric,
+                    ...(measured ? numeric : { lineHeight: 1.35 }),
                   }}
                 >
                   {row.note}
                 </span>
               )}
             </span>
-            <span
-              aria-hidden="true"
-              style={{
-                display: "block",
-                height: 4,
-                borderRadius: 2,
-                background: theme.track,
-                overflow: "hidden",
-                marginTop: 3,
-              }}
-            >
+            {measured && (
               <span
+                aria-hidden="true"
                 style={{
                   display: "block",
-                  height: "100%",
-                  width: `${whole > 0 ? Math.min(100, (row.value / whole) * 100) : 0}%`,
-                  minWidth: row.value > 0 ? 2 : 0,
-                  background: row.color ?? theme.secondary,
+                  height: 4,
                   borderRadius: 2,
-                  transition: "width 240ms cubic-bezier(0.22, 1, 0.36, 1)",
+                  background: theme.track,
+                  overflow: "hidden",
+                  marginTop: 3,
                 }}
-              />
-            </span>
+              >
+                <span
+                  style={{
+                    display: "block",
+                    height: "100%",
+                    width: `${whole > 0 ? Math.min(100, (row.value / whole) * 100) : 0}%`,
+                    minWidth: row.value > 0 ? 2 : 0,
+                    background: row.color ?? theme.secondary,
+                    borderRadius: 2,
+                    transition: "width 240ms cubic-bezier(0.22, 1, 0.36, 1)",
+                  }}
+                />
+              </span>
+            )}
           </>
         );
         return onSelect ? (

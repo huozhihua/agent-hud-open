@@ -2,17 +2,195 @@ use super::{display, hooks_by_id, hooks_of, session_id, Permission, Reply};
 use crate::{iso, text, trimmed, validate_payload};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
-use std::sync::Mutex;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
-/// Session-scoped Always rules for clients that cannot write permanent client
-/// rules (Cursor). Checked in the HUD process before holding a ticket.
-static SESSION_ALWAYS: Mutex<Vec<SessionAlways>> = Mutex::new(Vec::new());
+/// Cap retained Always rules so a long-lived HUD process cannot grow forever.
+const WORKSPACE_ALWAYS_LIMIT: usize = 500;
 
-#[derive(Clone)]
-struct SessionAlways {
-    session_id: String,
-    tool_name: String,
-    pattern: String,
+type AlwaysPersister = Arc<dyn Fn(Vec<WorkspaceAlwaysRule>) -> Result<(), String> + Send + Sync>;
+
+/// Workspace-scoped Always rules. Checked in the HUD process before holding a
+/// ticket. Shell patterns are command prefixes (Cursor `terminalAllowlist`),
+/// not a wildcard for every command.
+static WORKSPACE_ALWAYS: Mutex<Vec<WorkspaceAlwaysRule>> = Mutex::new(Vec::new());
+static ALWAYS_PERSISTER: Mutex<Option<AlwaysPersister>> = Mutex::new(None);
+
+/// One HUD-side Always rule: a workspace root, a tool, and what that tool may
+/// repeat (a shell prefix, a file path, or one `server:tool`).
+///
+/// `pattern` is never a silent whole-tool `*`. A missing pattern loads as
+/// empty and matches nothing.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceAlwaysRule {
+    pub workspace: String,
+    pub tool_name: String,
+    #[serde(default)]
+    pub pattern: String,
+}
+
+/// Replace the in-memory Always table (used when loading from disk).
+///
+/// @param rules Rules restored from the host store
+pub fn load_workspace_always(rules: Vec<WorkspaceAlwaysRule>) {
+    if let Ok(mut slot) = WORKSPACE_ALWAYS.lock() {
+        *slot = rules
+            .into_iter()
+            .filter(|rule| !rule.workspace.is_empty() && !rule.tool_name.is_empty())
+            .collect();
+        trim_workspace_always(&mut slot);
+    }
+}
+
+/// Snapshot of the current Always table for host persistence.
+///
+/// @return Current rules in insertion order
+pub fn workspace_always_snapshot() -> Vec<WorkspaceAlwaysRule> {
+    WORKSPACE_ALWAYS
+        .lock()
+        .map(|rules| rules.clone())
+        .unwrap_or_default()
+}
+
+/// Register a host callback invoked after Always rules change.
+///
+/// The callback must report write failures. A failed write does not update
+/// the in-memory table, so a reload cannot forget a trust the card already
+/// granted.
+///
+/// @param persister Writes the snapshot to durable storage; None clears it
+pub fn set_workspace_always_persister(persister: Option<AlwaysPersister>) {
+    if let Ok(mut slot) = ALWAYS_PERSISTER.lock() {
+        *slot = persister;
+    }
+}
+
+fn trim_workspace_always(rules: &mut Vec<WorkspaceAlwaysRule>) {
+    if rules.len() > WORKSPACE_ALWAYS_LIMIT {
+        let drop = rules.len() - WORKSPACE_ALWAYS_LIMIT;
+        rules.drain(0..drop);
+    }
+}
+
+fn persist_workspace_always(rules: &[WorkspaceAlwaysRule]) -> Result<(), String> {
+    let slot = ALWAYS_PERSISTER
+        .lock()
+        .map_err(|_| "Always rules are unavailable".to_string())?;
+    if let Some(persister) = slot.as_ref() {
+        persister(rules.to_vec())
+    } else {
+        Ok(())
+    }
+}
+
+/// Normalize a workspace or file path for Always keys (absolute, no trailing slash).
+///
+/// Canonicalizes when the path exists so a symlinked root matches across
+/// sessions. A missing path keeps its absolute form.
+///
+/// @param raw Path from `workspace_roots`, `cwd`, or a file gate
+/// @return Stable comparison key, or None when empty
+fn normalize_workspace(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let path = PathBuf::from(trimmed);
+    let absolute = if path.is_absolute() {
+        path
+    } else {
+        std::env::current_dir().ok()?.join(path)
+    };
+    let resolved = absolute.canonicalize().unwrap_or(absolute);
+    let mut key = resolved.to_string_lossy().into_owned();
+    while key.len() > 1 && (key.ends_with('/') || key.ends_with('\\')) {
+        key.pop();
+    }
+    (!key.is_empty()).then_some(key)
+}
+
+fn path_contains(root: &str, path: &str) -> bool {
+    Path::new(path).starts_with(Path::new(root))
+}
+
+/// Roots a Cursor gate should be matched against, and the primary key shown
+/// on the request.
+///
+/// Every `workspace_roots` entry counts, not only `[0]`. When `cwd` sits
+/// inside one of them, the stored rule uses the longest containing root.
+struct WorkspaceScope {
+    primary: Option<String>,
+    /// Roots an existing rule may hit: every listed root, or `cwd` when the
+    /// payload has no roots.
+    match_keys: Vec<String>,
+}
+
+fn workspace_scope(payload: &Value) -> WorkspaceScope {
+    let mut roots = Vec::new();
+    if let Some(list) = payload["workspace_roots"].as_array() {
+        for root in list {
+            if let Some(key) = text(root).and_then(normalize_workspace) {
+                if !roots.contains(&key) {
+                    roots.push(key);
+                }
+            }
+        }
+    }
+    let cwd = text(&payload["cwd"]).and_then(normalize_workspace);
+    let containing = cwd.as_ref().and_then(|cwd| {
+        roots
+            .iter()
+            .filter(|root| path_contains(root, cwd))
+            .max_by_key(|root| root.len())
+            .cloned()
+    });
+    let mut match_keys = roots;
+    if match_keys.is_empty() {
+        if let Some(cwd) = cwd {
+            match_keys.push(cwd);
+        }
+    }
+    let primary = containing.or_else(|| match_keys.first().cloned());
+    WorkspaceScope {
+        primary,
+        match_keys,
+    }
+}
+
+/// Where a new rule is written. Prefer the longest root that contains `cwd`
+/// so a multi-root window does not stamp the rule onto every folder. When
+/// `cwd` picks nothing, keep every match key (there is no single repo).
+fn store_keys(request: &Request) -> Vec<String> {
+    let keys = if request.workspace_keys.is_empty() {
+        request.workspace.clone().into_iter().collect::<Vec<_>>()
+    } else {
+        request.workspace_keys.clone()
+    };
+    if let Some(cwd) = request.cwd.as_deref().and_then(normalize_workspace) {
+        if let Some(best) = keys
+            .iter()
+            .filter(|key| path_contains(key, &cwd))
+            .max_by_key(|key| key.len())
+            .cloned()
+        {
+            return vec![best];
+        }
+    }
+    keys
+}
+
+fn normalize_scope_path(raw: &str, cwd: Option<&str>) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let path = PathBuf::from(trimmed);
+    if path.is_absolute() {
+        return normalize_workspace(trimmed);
+    }
+    let base = cwd.and_then(normalize_workspace)?;
+    normalize_workspace(&Path::new(&base).join(path).to_string_lossy())
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -29,6 +207,14 @@ pub struct Request {
     summary: String,
     detail: Option<String>,
     cwd: Option<String>,
+    /// Workspace a new Always rule is keyed to (longest root that contains
+    /// `cwd`, else the first listed root). None → Cursor Always unavailable.
+    workspace: Option<String>,
+    /// Every workspace root this gate listed, or `cwd` when it listed none.
+    /// A rule matches when its workspace is any of these. Not part of the
+    /// serde view: live requests keep it in memory.
+    #[serde(default, skip)]
+    workspace_keys: Vec<String>,
     path: Option<String>,
     removed: Option<String>,
     added: Option<String>,
@@ -123,7 +309,9 @@ fn normalize_cursor_payload(payload: &Value) -> Value {
     Value::Object(fields)
 }
 
-/// Build a session Always suggestion when the client offers no `permission_suggestions`.
+/// Build an Always suggestion when a non-Cursor client offers no
+/// `permission_suggestions`. Those clients still receive the suggestion in
+/// `updatedPermissions`; `destination` stays `session` for them.
 fn synthetic_always(tool: &str, input: &Value) -> Value {
     let content = match tool {
         "Bash" | "Shell" => trimmed(&input["command"]),
@@ -143,63 +331,370 @@ fn synthetic_always(tool: &str, input: &Value) -> Value {
     })
 }
 
-fn remember_session_always(request: &Request, suggestion: &Value) {
-    let pattern = suggestion["rules"]
-        .as_array()
-        .and_then(|list| list.first())
-        .and_then(|rule| text(&rule["ruleContent"]))
-        .map(str::to_owned)
-        .or_else(|| {
-            suggestion["rules"]
-                .as_array()
-                .and_then(|list| list.first())
-                .and_then(|rule| text(&rule["toolName"]))
-                .map(|_| "*".into())
-        });
-    let Some(pattern) = pattern else {
-        return;
+/// Cursor Always suggestion. `destination` is `workspace` because the rule is
+/// saved in HUD's per-workspace store, not a session and not Cursor's
+/// `terminalAllowlist` / `permissions.json`.
+///
+/// Shell content is a command prefix (`git`, `git status`), not `*`.
+/// File tools use a normalized path. MCP uses `server:tool`. No safe scope
+/// means no suggestion, so the card does not offer a silent whole-tool trust.
+fn synthetic_cursor_always(tool: &str, input: &Value, cwd: Option<&str>) -> Option<Value> {
+    let content = cursor_rule_content(tool, input, cwd)?;
+    let tool_name = if tool.starts_with("MCP:") {
+        "MCP"
+    } else {
+        tool
     };
+    Some(json!({
+        "type": "addRules",
+        "behavior": "allow",
+        "destination": "workspace",
+        "rules": [{
+            "toolName": tool_name,
+            "ruleContent": content
+        }]
+    }))
+}
+
+fn cursor_rule_content(tool: &str, input: &Value, cwd: Option<&str>) -> Option<String> {
+    let content = match tool {
+        "Bash" | "Shell" => shell_prefix(trimmed(&input["command"])?.as_str())?,
+        "Read" | "Write" | "Edit" | "MultiEdit" | "NotebookEdit" | "Delete" => {
+            normalize_scope_path(&scope_path(input)?, cwd)?
+        }
+        "Glob" | "Grep" => {
+            let path = trimmed(&input["path"]).or_else(|| trimmed(&input["target_directory"]))?;
+            normalize_scope_path(&path, cwd)?
+        }
+        "WebFetch" => trimmed(&input["url"])?,
+        _ if tool.starts_with("MCP:") => mcp_pattern(tool)?,
+        _ => return None,
+    };
+    (content != "*" && !content.is_empty()).then_some(content)
+}
+
+fn scope_path(input: &Value) -> Option<String> {
+    file_path(input)
+        .or_else(|| trimmed(&input["path"]))
+        .or_else(|| trimmed(&input["target_file"]))
+}
+
+/// `MCP:server/tool` → Cursor's `server:tool`. Names that contain `:` cannot
+/// be written without looking like a wildcard, so Always is not offered.
+fn mcp_pattern(tool: &str) -> Option<String> {
+    let rest = tool.strip_prefix("MCP:")?;
+    let (server, name) = rest.split_once('/')?;
+    if server.is_empty()
+        || name.is_empty()
+        || server.contains(':')
+        || name.contains(':')
+        || server.contains('*')
+        || name.contains('*')
+    {
+        return None;
+    }
+    Some(format!("{server}:{name}"))
+}
+
+/// Command prefix stored for Shell Always.
+///
+/// Normalization (simple commands only):
+/// 1. Reject unquoted shell control (`&&`, `||`, `|`, `;`, `&`, redirects,
+///    newlines, backticks, `$()`). Those gates get no Always rule.
+/// 2. Drop leading `NAME=value` assignments.
+/// 3. Keep the executable token as written (`git`, `/usr/bin/git`).
+/// 4. Append the next token when it is a subcommand word (`git status`,
+///    `npm install`), not a flag (`-`) and not a path or glob.
+/// 5. Leave later arguments off the prefix.
+///
+/// Matching is case-sensitive and stops at a token boundary, same as Cursor
+/// `terminalAllowlist`: `git` matches `git status` but not `gitk`; `git status`
+/// matches `git status --short`. A pattern `base:glob` such as `npm:install*`
+/// matches that executable whose arguments match the glob. A pattern ending in
+/// `:*` (Claude's `npm test:*`) is the boundary prefix of the stem.
+/// Compound commands are not auto-allowed, which is stricter than Cursor's
+/// raw string prefix (`git status` would otherwise allow `git status && rm`).
+fn shell_prefix(command: &str) -> Option<String> {
+    let tokens = simple_command_tokens(command)?;
+    let rest = skip_env(&tokens);
+    let binary = rest.first()?.as_str();
+    if binary.is_empty() {
+        return None;
+    }
+    if let Some(second) = rest.get(1) {
+        if is_subcommand(second) {
+            return Some(format!("{binary} {second}"));
+        }
+    }
+    Some(binary.to_owned())
+}
+
+fn is_subcommand(token: &str) -> bool {
+    let mut chars = token.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    if matches!(first, '-' | '/' | '\\' | '.' | '~') {
+        return false;
+    }
+    !token
+        .chars()
+        .any(|c| matches!(c, '/' | '\\' | '*' | '?' | '.' | '='))
+}
+
+fn skip_env(tokens: &[String]) -> &[String] {
+    let mut rest = tokens;
+    while rest.first().is_some_and(|token| is_env_assignment(token)) {
+        rest = &rest[1..];
+    }
+    rest
+}
+
+fn is_env_assignment(token: &str) -> bool {
+    let Some((name, _)) = token.split_once('=') else {
+        return false;
+    };
+    let mut chars = name.chars();
+    match chars.next() {
+        Some(c) if c.is_ascii_alphabetic() || c == '_' => {}
+        _ => return false,
+    }
+    chars.all(|c| c.is_ascii_alphanumeric() || c == '_') && !name.is_empty()
+}
+
+/// Tokens of one simple command. None when the line is compound or the quotes
+/// do not close — Always will not guess a prefix for those.
+fn simple_command_tokens(command: &str) -> Option<Vec<String>> {
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+    let mut chars = command.chars().peekable();
+    let mut quote: Option<char> = None;
+    while let Some(c) = chars.next() {
+        if let Some(q) = quote {
+            if c == q {
+                quote = None;
+            } else if q == '"' && c == '\\' {
+                if let Some(next) = chars.next() {
+                    current.push(next);
+                }
+            } else {
+                current.push(c);
+            }
+            continue;
+        }
+        match c {
+            '\'' | '"' => quote = Some(c),
+            '\\' => {
+                if let Some(next) = chars.next() {
+                    current.push(next);
+                }
+            }
+            c if c.is_whitespace() => {
+                if !current.is_empty() {
+                    tokens.push(std::mem::take(&mut current));
+                }
+            }
+            '&' | '|' | ';' | '<' | '>' | '(' | ')' | '`' | '\n' => return None,
+            '$' if chars.peek() == Some(&'(') => return None,
+            _ => current.push(c),
+        }
+    }
+    if quote.is_some() {
+        return None;
+    }
+    if !current.is_empty() {
+        tokens.push(current);
+    }
+    (!tokens.is_empty()).then_some(tokens)
+}
+
+fn command_body(command: &str) -> Option<String> {
+    let tokens = simple_command_tokens(command)?;
+    let rest = skip_env(&tokens);
+    (!rest.is_empty()).then(|| rest.join(" "))
+}
+
+fn shell_matches(command: &str, pattern: &str) -> bool {
+    let pattern = pattern.trim();
+    if pattern.is_empty() || pattern == "*" {
+        return false;
+    }
+    let Some(body) = command_body(command) else {
+        return false;
+    };
+    if let Some(stem) = pattern.strip_suffix(":*") {
+        return !stem.is_empty() && boundary_prefix(&body, stem.trim());
+    }
+    if let Some((base, glob)) = split_colon_glob(pattern) {
+        return colon_matches(&body, base, glob);
+    }
+    boundary_prefix(&body, pattern)
+}
+
+fn boundary_prefix(command: &str, prefix: &str) -> bool {
+    if prefix.is_empty() {
+        return false;
+    }
+    if command == prefix {
+        return true;
+    }
+    command.starts_with(prefix)
+        && command[prefix.len()..]
+            .chars()
+            .next()
+            .is_some_and(char::is_whitespace)
+}
+
+fn split_colon_glob(pattern: &str) -> Option<(&str, &str)> {
+    let (base, glob) = pattern.split_once(':')?;
+    if base.is_empty() || base.chars().any(char::is_whitespace) {
+        return None;
+    }
+    (glob.contains('*') || glob.contains('?')).then_some((base, glob))
+}
+
+fn colon_matches(body: &str, base: &str, glob: &str) -> bool {
+    let mut parts = body.split_whitespace();
+    let Some(command) = parts.next() else {
+        return false;
+    };
+    if command != base {
+        return false;
+    }
+    let args = parts.collect::<Vec<_>>().join(" ");
+    glob_match(glob, &args)
+}
+
+fn glob_match(pattern: &str, text: &str) -> bool {
+    let pattern = pattern.as_bytes();
+    let text = text.as_bytes();
+    let (mut pi, mut ti) = (0usize, 0usize);
+    let mut star: Option<(usize, usize)> = None;
+    while ti < text.len() {
+        if pi < pattern.len() && (pattern[pi] == b'?' || pattern[pi] == text[ti]) {
+            pi += 1;
+            ti += 1;
+        } else if pi < pattern.len() && pattern[pi] == b'*' {
+            star = Some((pi, ti));
+            pi += 1;
+        } else if let Some((sp, st)) = star {
+            let next = st + 1;
+            star = Some((sp, next));
+            pi = sp + 1;
+            ti = next;
+        } else {
+            return false;
+        }
+    }
+    while pi < pattern.len() && pattern[pi] == b'*' {
+        pi += 1;
+    }
+    pi == pattern.len()
+}
+
+fn usable_pattern(pattern: &str) -> Result<(), String> {
+    if pattern.is_empty() || pattern == "*" || pattern.contains('\n') {
+        return Err("Always needs a command prefix, file path, or one MCP tool".into());
+    }
+    Ok(())
+}
+
+fn pattern_from_suggestion(suggestion: &Value) -> Result<String, String> {
+    let content = suggestion["rules"]
+        .as_array()
+        .and_then(|rules| rules.first())
+        .and_then(|rule| text(&rule["ruleContent"]))
+        .ok_or("Always needs a command prefix, file path, or one MCP tool")?;
+    usable_pattern(content)?;
+    Ok(content.to_owned())
+}
+
+fn remember_workspace_always(request: &Request, suggestion: &Value) -> Result<(), String> {
+    let keys = store_keys(request);
+    if keys.is_empty() {
+        return Ok(());
+    }
+    let pattern = pattern_from_suggestion(suggestion)?;
     let tool = request
         .tool_name
         .as_deref()
         .map(tool_kind)
         .unwrap_or("")
         .to_owned();
-    let Ok(mut rules) = SESSION_ALWAYS.lock() else {
-        return;
-    };
-    let entry = SessionAlways {
-        session_id: request.session_id.clone(),
-        tool_name: tool,
-        pattern,
-    };
-    if !rules.iter().any(|rule| {
-        rule.session_id == entry.session_id
-            && rule.tool_name == entry.tool_name
-            && rule.pattern == entry.pattern
-    }) {
-        rules.push(entry);
+    if tool.is_empty() {
+        return Err("Always needs a tool name".into());
     }
+    let mut rules = WORKSPACE_ALWAYS
+        .lock()
+        .map_err(|_| "Always rules are unavailable".to_string())?;
+    let mut next = rules.clone();
+    let before = next.len();
+    for workspace in keys {
+        let entry = WorkspaceAlwaysRule {
+            workspace,
+            tool_name: tool.clone(),
+            pattern: pattern.clone(),
+        };
+        if !next.iter().any(|rule| {
+            rule.workspace == entry.workspace
+                && rule.tool_name == entry.tool_name
+                && rule.pattern == entry.pattern
+        }) {
+            next.push(entry);
+        }
+    }
+    if next.len() == before {
+        return Ok(());
+    }
+    trim_workspace_always(&mut next);
+    persist_workspace_always(&next)
+        .map_err(|error| format!("Could not save the workspace Always rule: {error}"))?;
+    *rules = next;
+    Ok(())
 }
 
-fn session_always_matches(request: &Request) -> bool {
+fn workspace_always_matches(request: &Request) -> bool {
     let tool = request.tool_name.as_deref().map(tool_kind).unwrap_or("");
-    let haystack = request
-        .detail
-        .as_deref()
-        .or(request.path.as_deref())
-        .unwrap_or("");
-    let Ok(rules) = SESSION_ALWAYS.lock() else {
+    if tool.is_empty() {
+        return false;
+    }
+    let keys = if request.workspace_keys.is_empty() {
+        request.workspace.clone().into_iter().collect::<Vec<_>>()
+    } else {
+        request.workspace_keys.clone()
+    };
+    if keys.is_empty() {
+        return false;
+    }
+    let Ok(rules) = WORKSPACE_ALWAYS.lock() else {
         return false;
     };
     rules.iter().any(|rule| {
-        rule.session_id == request.session_id
+        keys.iter().any(|key| key == &rule.workspace)
             && (rule.tool_name == tool
                 || rule.tool_name == request.tool_name.as_deref().unwrap_or(""))
-            && (rule.pattern == "*"
-                || rule.pattern == haystack
-                || (!rule.pattern.is_empty() && haystack.contains(&rule.pattern)))
+            && subject_matches(request, tool, &rule.pattern)
     })
+}
+
+fn subject_matches(request: &Request, tool: &str, pattern: &str) -> bool {
+    if pattern.is_empty() || pattern == "*" {
+        return false;
+    }
+    match tool {
+        "Bash" => request
+            .detail
+            .as_deref()
+            .is_some_and(|command| shell_matches(command, pattern)),
+        "Read" | "Write" | "Edit" | "MultiEdit" | "NotebookEdit" | "Delete" | "Glob" | "Grep" => {
+            request.path.as_deref().is_some_and(|path| {
+                normalize_scope_path(path, request.cwd.as_deref()).as_deref() == Some(pattern)
+            })
+        }
+        "WebFetch" => request.detail.as_deref().map(str::trim) == Some(pattern),
+        _ if tool.starts_with("MCP:") => mcp_pattern(tool).as_deref() == Some(pattern),
+        _ => false,
+    }
 }
 
 /// If a HUD-side Always rule matches, the Cursor permission reply to write
@@ -209,10 +704,10 @@ fn session_always_matches(request: &Request) -> bool {
 /// @return Cursor `{"permission":"allow"}` when matched; otherwise None
 pub fn auto_allow_response(request: &Request) -> Option<Value> {
     let permission = request.permission()?;
-    if !matches!(permission.reply, Reply::CursorPermission) {
+    if !matches!(&permission.reply, Reply::CursorPermission) {
         return None;
     }
-    session_always_matches(request).then(|| json!({"permission": "allow"}))
+    workspace_always_matches(request).then(|| json!({"permission": "allow"}))
 }
 fn questions(value: &Value) -> Option<Vec<Question>> {
     let list = value.as_array().filter(|v| !v.is_empty())?;
@@ -345,7 +840,7 @@ pub fn parse_request(source_name: &str, payload: &Value) -> Result<Option<Reques
         return Err("This client does not use a permission hook".into());
     };
     let normalized;
-    let payload = if matches!(permission.reply, Reply::CursorPermission) {
+    let payload = if matches!(&permission.reply, Reply::CursorPermission) {
         normalized = normalize_cursor_payload(payload);
         &normalized
     } else {
@@ -368,7 +863,8 @@ pub fn parse_request(source_name: &str, payload: &Value) -> Result<Option<Reques
     } else {
         vec![]
     };
-    let path = if matches!(
+    let cursor = matches!(&permission.reply, Reply::CursorPermission);
+    let mut path = if matches!(
         kind,
         Some("Read" | "Write" | "Edit" | "MultiEdit" | "NotebookEdit")
     ) {
@@ -376,6 +872,13 @@ pub fn parse_request(source_name: &str, payload: &Value) -> Result<Option<Reques
     } else {
         None
     };
+    if path.is_none() && cursor && matches!(kind, Some("Delete" | "Glob" | "Grep")) {
+        path = if matches!(kind, Some("Glob" | "Grep")) {
+            trimmed(&input["path"]).or_else(|| trimmed(&input["target_directory"]))
+        } else {
+            scope_path(input)
+        };
+    }
     let change = if kind == Some("MultiEdit") {
         input["edits"]
             .as_array()
@@ -386,13 +889,30 @@ pub fn parse_request(source_name: &str, payload: &Value) -> Result<Option<Reques
     } else {
         &Value::Null
     };
+    let scope = if cursor {
+        workspace_scope(payload)
+    } else {
+        WorkspaceScope {
+            primary: None,
+            match_keys: Vec::new(),
+        }
+    };
+    let cwd = payload["cwd"].as_str().map(str::to_owned);
     let mut suggestions = payload["permission_suggestions"]
         .as_array()
         .cloned()
         .unwrap_or_default();
     if permission.rules && suggestions.is_empty() {
         if let Some(tool) = kind {
-            suggestions.push(synthetic_always(tool, input));
+            if cursor {
+                if scope.primary.is_some() {
+                    if let Some(suggestion) = synthetic_cursor_always(tool, input, cwd.as_deref()) {
+                        suggestions.push(suggestion);
+                    }
+                }
+            } else {
+                suggestions.push(synthetic_always(tool, input));
+            }
         }
     }
     Ok(Some(Request {
@@ -414,7 +934,9 @@ pub fn parse_request(source_name: &str, payload: &Value) -> Result<Option<Reques
             .map(|q| q.question.clone())
             .unwrap_or_else(|| summary(kind, input)),
         detail: detail(kind, input),
-        cwd: payload["cwd"].as_str().map(str::to_owned),
+        cwd,
+        workspace: scope.primary,
+        workspace_keys: scope.match_keys,
         path,
         removed: lines(&change["old_string"]),
         added: lines(&change["new_string"])
@@ -576,12 +1098,12 @@ impl Request {
         }
         if kind == "always" {
             if let Some(suggestion) = decision.get("suggestion").or_else(|| self.always()) {
-                remember_session_always(self, suggestion);
+                remember_workspace_always(self, suggestion)?;
             }
         }
         if self
             .permission()
-            .is_some_and(|permission| matches!(permission.reply, Reply::Decision))
+            .is_some_and(|permission| matches!(&permission.reply, Reply::Decision))
         {
             return Ok(Some(
                 json!({"decision":if output["behavior"]=="allow"{"approve"}else{"block"}}),
@@ -589,7 +1111,7 @@ impl Request {
         }
         if self
             .permission()
-            .is_some_and(|permission| matches!(permission.reply, Reply::CursorPermission))
+            .is_some_and(|permission| matches!(&permission.reply, Reply::CursorPermission))
         {
             let allowed = output["behavior"] == "allow";
             let mut body = json!({"permission": if allowed { "allow" } else { "deny" }});
@@ -607,52 +1129,458 @@ impl Request {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Mutex, OnceLock};
 
-    fn cursor_shell(command: &str) -> Value {
+    fn lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+    }
+
+    fn reset() {
+        set_workspace_always_persister(None);
+        load_workspace_always(vec![]);
+    }
+
+    fn cursor_shell(conversation: &str, command: &str, workspace: &str) -> Value {
         json!({
-            "conversation_id": "always-sess",
+            "conversation_id": conversation,
             "hook_event_name": "beforeShellExecution",
             "command": command,
-            "cwd": "/tmp",
+            "cwd": workspace,
+            "workspace_roots": [workspace],
         })
+    }
+
+    fn cursor_shell_roots(command: &str, cwd: &str, roots: &[&str]) -> Value {
+        json!({
+            "conversation_id": "conv",
+            "hook_event_name": "beforeShellExecution",
+            "command": command,
+            "cwd": cwd,
+            "workspace_roots": roots,
+        })
+    }
+
+    fn cursor_edit(conversation: &str, path: &str, workspace: &str) -> Value {
+        json!({
+            "conversation_id": conversation,
+            "hook_event_name": "preToolUse",
+            "tool_name": "Edit",
+            "tool_input": {"file_path": path, "old_string": "a", "new_string": "b"},
+            "cwd": workspace,
+            "workspace_roots": [workspace],
+        })
+    }
+
+    fn allow_prefix(request: &Request) -> String {
+        request.always().and_then(rules).unwrap_or_default()
     }
 
     #[test]
     fn cursor_shell_parses_and_replies_with_permission() {
-        let request = parse_request("cursor", &cursor_shell("echo hi"))
+        let _guard = lock();
+        reset();
+        let request = parse_request("cursor", &cursor_shell("always-sess", "echo hi", "/tmp"))
             .unwrap()
             .unwrap();
         assert_eq!(request.session_id, "cursor:always-sess");
         assert_eq!(request.tool_name.as_deref(), Some("Shell"));
-        assert!(request.always().is_some());
+        assert!(request.workspace.is_some());
+        assert_eq!(allow_prefix(&request), "Bash(echo hi)");
+        assert_eq!(request.always().unwrap()["destination"], "workspace");
         let allow = request
             .response(&json!({"kind": "allow"}))
             .unwrap()
             .unwrap();
         assert_eq!(allow, json!({"permission": "allow"}));
+        assert!(workspace_always_snapshot().is_empty());
         let deny = request.response(&json!({"kind": "deny"})).unwrap().unwrap();
         assert_eq!(
             deny,
             json!({"permission": "deny", "user_message": "Denied in Agent HUD"})
         );
+        assert!(auto_allow_response(&request).is_none());
     }
 
     #[test]
-    fn cursor_always_auto_allows_a_matching_follow_up() {
-        let first = parse_request("cursor", &cursor_shell("npm test"))
+    fn shell_always_is_a_command_prefix_not_the_whole_tool() {
+        let _guard = lock();
+        reset();
+        let root = tempfile::tempdir().unwrap();
+        let ws = root
+            .path()
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let first = parse_request("cursor", &cursor_shell("c1", "git status --short", &ws))
             .unwrap()
             .unwrap();
+        assert_eq!(allow_prefix(&first), "Bash(git status)");
+        let listed = parse_request("cursor", &cursor_shell("c0", "ls -la /tmp", &ws))
+            .unwrap()
+            .unwrap();
+        assert_eq!(allow_prefix(&listed), "Bash(ls)");
         first.response(&json!({"kind": "always"})).unwrap().unwrap();
-        let second = parse_request("cursor", &cursor_shell("npm test"))
+        let snap = workspace_always_snapshot();
+        assert_eq!(snap.len(), 1);
+        assert_eq!(snap[0].tool_name, "Bash");
+        assert_eq!(snap[0].pattern, "git status");
+        assert_eq!(snap[0].workspace, ws);
+
+        let allowed = ["git status", "git status -sb", "FOO=1 git status --short"];
+        for command in allowed {
+            let next = parse_request("cursor", &cursor_shell("c2", command, &ws))
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                auto_allow_response(&next),
+                Some(json!({"permission": "allow"})),
+                "{command}"
+            );
+        }
+        for command in ["git diff", "gitk", "git statusfoo", "npm install", "ls"] {
+            let next = parse_request("cursor", &cursor_shell("c3", command, &ws))
+                .unwrap()
+                .unwrap();
+            assert!(auto_allow_response(&next).is_none(), "{command}");
+        }
+        let bare = parse_request("cursor", &cursor_shell("c4", "git", &ws))
+            .unwrap()
+            .unwrap();
+        assert!(auto_allow_response(&bare).is_none());
+        bare.response(&json!({"kind": "always"})).unwrap().unwrap();
+        let git = parse_request("cursor", &cursor_shell("c5", "git diff --stat", &ws))
             .unwrap()
             .unwrap();
         assert_eq!(
-            auto_allow_response(&second),
+            auto_allow_response(&git),
             Some(json!({"permission": "allow"}))
         );
-        let other = parse_request("cursor", &cursor_shell("rm -rf /"))
+        let gitk = parse_request("cursor", &cursor_shell("c6", "gitk", &ws))
+            .unwrap()
+            .unwrap();
+        assert!(auto_allow_response(&gitk).is_none());
+    }
+
+    #[test]
+    fn npm_install_prefix_matches_cursor_colon_glob_too() {
+        let _guard = lock();
+        reset();
+        let root = tempfile::tempdir().unwrap();
+        let ws = root
+            .path()
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let request = parse_request("cursor", &cursor_shell("c1", "npm install express", &ws))
+            .unwrap()
+            .unwrap();
+        assert_eq!(allow_prefix(&request), "Bash(npm install)");
+        request
+            .response(&json!({"kind": "always"}))
+            .unwrap()
+            .unwrap();
+        let again = parse_request("cursor", &cursor_shell("c2", "npm install left-pad", &ws))
+            .unwrap()
+            .unwrap();
+        assert!(auto_allow_response(&again).is_some());
+        let test = parse_request("cursor", &cursor_shell("c3", "npm test", &ws))
+            .unwrap()
+            .unwrap();
+        assert!(auto_allow_response(&test).is_none());
+
+        load_workspace_always(vec![WorkspaceAlwaysRule {
+            workspace: ws.clone(),
+            tool_name: "Bash".into(),
+            pattern: "npm:install*".into(),
+        }]);
+        let globbed = parse_request("cursor", &cursor_shell("c4", "npm install express", &ws))
+            .unwrap()
+            .unwrap();
+        assert!(auto_allow_response(&globbed).is_some());
+        let not_glob = parse_request("cursor", &cursor_shell("c5", "npm test", &ws))
+            .unwrap()
+            .unwrap();
+        assert!(auto_allow_response(&not_glob).is_none());
+        load_workspace_always(vec![WorkspaceAlwaysRule {
+            workspace: ws.clone(),
+            tool_name: "Bash".into(),
+            pattern: "*".into(),
+        }]);
+        let starred = parse_request("cursor", &cursor_shell("c6", "npm install", &ws))
+            .unwrap()
+            .unwrap();
+        assert!(auto_allow_response(&starred).is_none());
+    }
+
+    #[test]
+    fn compound_shell_commands_do_not_offer_always() {
+        let _guard = lock();
+        reset();
+        let root = tempfile::tempdir().unwrap();
+        let ws = root
+            .path()
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let request = parse_request("cursor", &cursor_shell("c1", "git status && rm -rf /", &ws))
+            .unwrap()
+            .unwrap();
+        assert!(request.always().is_none());
+        assert_eq!(request.view("id", 0)["allowsAlways"], false);
+        let stored = parse_request("cursor", &cursor_shell("c2", "git status", &ws))
+            .unwrap()
+            .unwrap();
+        stored
+            .response(&json!({"kind": "always"}))
+            .unwrap()
+            .unwrap();
+        let compound = parse_request("cursor", &cursor_shell("c3", "git status && rm -rf /", &ws))
+            .unwrap()
+            .unwrap();
+        assert!(auto_allow_response(&compound).is_none());
+    }
+
+    #[test]
+    fn edit_always_is_path_scoped_and_other_workspaces_still_ask() {
+        let _guard = lock();
+        reset();
+        let root = tempfile::tempdir().unwrap();
+        let ws = root
+            .path()
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let file = format!("{ws}/a.rs");
+        let first = parse_request("cursor", &cursor_edit("conv-1", &file, &ws))
+            .unwrap()
+            .unwrap();
+        assert_eq!(allow_prefix(&first), format!("Edit({file})"));
+        assert_eq!(first.always().unwrap()["destination"], "workspace");
+        first.response(&json!({"kind": "always"})).unwrap().unwrap();
+        let same = parse_request("cursor", &cursor_edit("conv-2", &file, &ws))
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            auto_allow_response(&same),
+            Some(json!({"permission": "allow"}))
+        );
+        let other_file =
+            parse_request("cursor", &cursor_edit("conv-3", &format!("{ws}/b.rs"), &ws))
+                .unwrap()
+                .unwrap();
+        assert!(auto_allow_response(&other_file).is_none());
+        let other = tempfile::tempdir().unwrap();
+        let other_ws = other
+            .path()
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let elsewhere = parse_request(
+            "cursor",
+            &cursor_edit("conv-4", &format!("{other_ws}/a.rs"), &other_ws),
+        )
+        .unwrap()
+        .unwrap();
+        assert!(auto_allow_response(&elsewhere).is_none());
+        let shell = parse_request("cursor", &cursor_shell("conv-5", "ls", &ws))
+            .unwrap()
+            .unwrap();
+        assert!(auto_allow_response(&shell).is_none());
+    }
+
+    #[test]
+    fn shell_always_follows_the_root_that_contains_cwd_not_only_the_first() {
+        let _guard = lock();
+        reset();
+        let parent = tempfile::tempdir().unwrap();
+        let a = parent.path().join("frontend");
+        let b = parent.path().join("backend");
+        std::fs::create_dir_all(&a).unwrap();
+        std::fs::create_dir_all(&b).unwrap();
+        let a = a.canonicalize().unwrap().to_string_lossy().into_owned();
+        let b = b.canonicalize().unwrap().to_string_lossy().into_owned();
+        let first = parse_request("cursor", &cursor_shell_roots("cargo test", &b, &[&a, &b]))
+            .unwrap()
+            .unwrap();
+        assert_eq!(first.workspace.as_deref(), Some(b.as_str()));
+        assert_eq!(allow_prefix(&first), "Bash(cargo test)");
+        first.response(&json!({"kind": "always"})).unwrap().unwrap();
+        assert_eq!(workspace_always_snapshot()[0].workspace, b);
+
+        let reordered = parse_request(
+            "cursor",
+            &cursor_shell_roots("cargo test --lib", &b, &[&b, &a]),
+        )
+        .unwrap()
+        .unwrap();
+        assert!(auto_allow_response(&reordered).is_some());
+
+        let other_root = parse_request("cursor", &cursor_shell_roots("cargo test", &a, &[&a, &b]))
+            .unwrap()
+            .unwrap();
+        assert!(
+            auto_allow_response(&other_root).is_some(),
+            "a listed root keeps the trust even when cwd is in the other root"
+        );
+        let only_frontend = parse_request("cursor", &cursor_shell_roots("cargo test", &a, &[&a]))
+            .unwrap()
+            .unwrap();
+        assert!(auto_allow_response(&only_frontend).is_none());
+    }
+
+    #[test]
+    fn mcp_always_stays_on_one_tool() {
+        let _guard = lock();
+        reset();
+        let root = tempfile::tempdir().unwrap();
+        let ws = root
+            .path()
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let payload = |tool: &str| {
+            json!({
+                "conversation_id": "c",
+                "hook_event_name": "beforeMCPExecution",
+                "mcp_server_name": "github",
+                "tool_name": tool,
+                "cwd": ws,
+                "workspace_roots": [ws],
+            })
+        };
+        let first = parse_request("cursor", &payload("create_issue"))
+            .unwrap()
+            .unwrap();
+        assert_eq!(allow_prefix(&first), "MCP(github:create_issue)");
+        first.response(&json!({"kind": "always"})).unwrap().unwrap();
+        let same = parse_request("cursor", &payload("create_issue"))
+            .unwrap()
+            .unwrap();
+        assert!(auto_allow_response(&same).is_some());
+        let other = parse_request("cursor", &payload("list_issues"))
             .unwrap()
             .unwrap();
         assert!(auto_allow_response(&other).is_none());
+        assert_eq!(
+            workspace_always_snapshot()[0].pattern,
+            "github:create_issue"
+        );
+    }
+
+    #[test]
+    fn tools_without_a_safe_scope_do_not_offer_always() {
+        let _guard = lock();
+        reset();
+        let root = tempfile::tempdir().unwrap();
+        let ws = root
+            .path()
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let task = parse_request(
+            "cursor",
+            &json!({
+                "conversation_id": "c",
+                "hook_event_name": "subagentStart",
+                "task": "Explore the auth flow",
+                "cwd": ws,
+                "workspace_roots": [ws],
+            }),
+        )
+        .unwrap()
+        .unwrap();
+        assert!(task.always().is_none());
+        let search = parse_request(
+            "cursor",
+            &json!({
+                "conversation_id": "c",
+                "hook_event_name": "preToolUse",
+                "tool_name": "WebSearch",
+                "tool_input": {"query": "serde"},
+                "cwd": ws,
+                "workspace_roots": [ws],
+            }),
+        )
+        .unwrap()
+        .unwrap();
+        assert!(search.always().is_none());
+        let grep = parse_request(
+            "cursor",
+            &json!({
+                "conversation_id": "c",
+                "hook_event_name": "preToolUse",
+                "tool_name": "Grep",
+                "tool_input": {"pattern": "TODO", "path": "src"},
+                "cwd": ws,
+                "workspace_roots": [ws],
+            }),
+        )
+        .unwrap()
+        .unwrap();
+        assert!(grep.always().is_some());
+        let saved = normalize_scope_path("src", Some(&ws)).unwrap();
+        assert_eq!(allow_prefix(&grep), format!("Grep({saved})"));
+        let fetch = |url: &str| {
+            parse_request(
+                "cursor",
+                &json!({
+                    "conversation_id": "c",
+                    "hook_event_name": "preToolUse",
+                    "tool_name": "WebFetch",
+                    "tool_input": {"url": url},
+                    "cwd": ws,
+                    "workspace_roots": [ws],
+                }),
+            )
+            .unwrap()
+            .unwrap()
+        };
+        let page = fetch("https://example.com/docs");
+        assert_eq!(allow_prefix(&page), "WebFetch(https://example.com/docs)");
+        page.response(&json!({"kind": "always"})).unwrap().unwrap();
+        assert!(auto_allow_response(&fetch("https://example.com/docs")).is_some());
+        assert!(auto_allow_response(&fetch("https://example.com/other")).is_none());
+    }
+
+    #[test]
+    fn a_failed_persister_does_not_keep_the_rule_in_memory() {
+        let _guard = lock();
+        reset();
+        let root = tempfile::tempdir().unwrap();
+        let ws = root
+            .path()
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        load_workspace_always(vec![WorkspaceAlwaysRule {
+            workspace: ws.clone(),
+            tool_name: "Read".into(),
+            pattern: format!("{ws}/kept.rs"),
+        }]);
+        set_workspace_always_persister(Some(std::sync::Arc::new(|_| Err("disk full".into()))));
+        let request = parse_request("cursor", &cursor_shell("c", "ls", &ws))
+            .unwrap()
+            .unwrap();
+        let error = request.response(&json!({"kind": "always"})).unwrap_err();
+        assert!(error.contains("disk full"), "{error}");
+        let snap = workspace_always_snapshot();
+        assert_eq!(snap.len(), 1);
+        assert_eq!(snap[0].tool_name, "Read");
+        let again = parse_request("cursor", &cursor_shell("c2", "ls", &ws))
+            .unwrap()
+            .unwrap();
+        assert!(auto_allow_response(&again).is_none());
+        reset();
     }
 }

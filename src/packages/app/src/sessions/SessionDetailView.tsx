@@ -5,8 +5,11 @@ import { Button } from "@agent-hud/ui/components/button";
 import { Tabs, TabsList, TabsTrigger } from "@agent-hud/ui/components/tabs";
 import { HUDArtwork as HUDLogo } from "@agent-hud/hud/HUDArtwork";
 import {
+  displayModel,
   sessionClient,
   sessionWhere,
+  subagentUsageNote,
+  subagentUsageReported,
   tokenKindOrder,
   type TokenKindName,
 } from "../lib/sessions";
@@ -508,6 +511,7 @@ function DetailHeader({
     startedRaw && endedRaw
       ? durationLabel(Date.parse(startedRaw), Date.parse(endedRaw), zh)
       : "—";
+  const model = displayModel(session, detail?.parent);
   return (
     <div
       className="session-statistics-detail-header"
@@ -571,7 +575,7 @@ function DetailHeader({
         <HUDLogo source={session.source} size={13} light={theme.light} />
         <span style={{ ...clipped, flex: 1 }} title={session.cwd ?? client}>
           {[
-            ...sessionWhere(session, client),
+            ...sessionWhere({ ...session, model, modelName: model }, client),
             zh ? `开始于 ${started}` : `Started ${started}`,
             zh ? `时长 ${duration}` : `Duration ${duration}`,
           ].join(" · ")}
@@ -1044,6 +1048,9 @@ function SubagentsCard({
   );
   const shown = children.slice(0, 6);
   const rest = children.slice(shown.length);
+  const unreported = (child: (typeof children)[number]) =>
+    !subagentUsageReported(child);
+  const allUnreported = children.length > 0 && children.every(unreported);
   const parts = [
     {
       key: "own",
@@ -1068,7 +1075,15 @@ function SubagentsCard({
             ? `子 agent（${children.length}）`
             : `Sub-agents (${children.length})`
         }
-        right={zh ? "占会话 Token" : "Of the session's tokens"}
+        right={
+          allUnreported
+            ? zh
+              ? "未单独上报"
+              : "Not reported separately"
+            : zh
+              ? "占会话 Token"
+              : "Of the session's tokens"
+        }
         theme={theme}
       />
       {theirs > 0 && (
@@ -1117,34 +1132,51 @@ function SubagentsCard({
         <div style={{ borderTop: `1px solid ${theme.divider}`, paddingTop: 8 }}>
           <ShareRows
             rows={[
-              ...shown.map((child) => ({
-                id: child.id,
-                label: (
-                  <span style={{ ...row, gap: 6 }}>
-                    <span style={clipped}>
-                      {child.title || child.modelName || child.model}
+              ...shown.map((child) => {
+                const model = displayModel(
+                  child,
+                  detail.session,
+                  detail.parent,
+                );
+                const inherited = displayModel(child) === "—" && model !== "—";
+                const measured = !unreported(child);
+                return {
+                  id: child.id,
+                  label: (
+                    <span style={{ ...row, gap: 6 }}>
+                      <span style={clipped}>{child.title || model}</span>
+                      {child.title && (
+                        <span
+                          style={{
+                            color: theme.secondary,
+                            fontSize: 11,
+                            flexShrink: 0,
+                          }}
+                          title={
+                            inherited
+                              ? zh
+                                ? "父会话的模型；本会话未单独上报"
+                                : "The parent session's model; this session did not report its own"
+                              : undefined
+                          }
+                        >
+                          {model}
+                        </span>
+                      )}
+                      <ChevronRight
+                        size={10}
+                        color={theme.tertiary}
+                        style={{ flexShrink: 0 }}
+                      />
                     </span>
-                    <span
-                      style={{
-                        color: theme.secondary,
-                        fontSize: 11,
-                        flexShrink: 0,
-                      }}
-                    >
-                      {child.modelName || child.model}
-                    </span>
-                    <ChevronRight
-                      size={10}
-                      color={theme.tertiary}
-                      style={{ flexShrink: 0 }}
-                    />
-                  </span>
-                ),
-                value: child.tokens,
-                note: share(child.tokens, total),
-                color: theme.secondary,
-                title: child.title,
-              })),
+                  ),
+                  value: child.tokens,
+                  note: subagentUsageNote(child, total, zh),
+                  measured,
+                  color: theme.secondary,
+                  title: child.title,
+                };
+              }),
               ...(rest.length > 0
                 ? [
                     {
@@ -1157,10 +1189,17 @@ function SubagentsCard({
                         </span>
                       ),
                       value: rest.reduce((sum, child) => sum + child.tokens, 0),
-                      note: share(
-                        rest.reduce((sum, child) => sum + child.tokens, 0),
-                        total,
-                      ),
+                      note: rest.every(unreported)
+                        ? subagentUsageNote(
+                            { tokens: 0, usageStatus: "unavailable" },
+                            total,
+                            zh,
+                          )
+                        : share(
+                            rest.reduce((sum, child) => sum + child.tokens, 0),
+                            total,
+                          ),
+                      measured: !rest.every(unreported),
                       color: theme.track,
                     },
                   ]

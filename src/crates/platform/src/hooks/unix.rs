@@ -336,8 +336,10 @@ pub(crate) fn send(
     stream
         .write_all(&bytes)
         .map_err(|_| "Hook callback failed")?;
-    // Keep the write side open: EOF means the waiting CLI was cancelled. The
-    // JSONL request already frames its payload without requiring a half-close.
+    // Keep the write side open while waiting. Cursor (and our entry) already
+    // drain stdin to EOF before `send` runs, so stdin EOF is not a cancel
+    // signal — killing the hook process drops this socket and the server
+    // withdraws the card via `disconnected`.
     let mut response = Vec::new();
     if flag == "--permission-hook" {
         let mut transcript = if super::settles_in_transcript(source) {

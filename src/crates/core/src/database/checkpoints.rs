@@ -43,6 +43,10 @@ pub(crate) struct LogHead {
     pub prompts: crate::naming::surfaces::PromptStamps,
     pub updated: String,
     pub usage: Usage,
+    /// Whether this log recorded a usage event. A header with no turn is
+    /// false, so a wire `tokens: 0` is not a measured share of its parent.
+    #[serde(default)]
+    pub metered: bool,
     pub offset: u64,
     pub length: u64,
     pub modified: Option<SystemTime>,
@@ -99,6 +103,19 @@ pub(crate) struct LogHead {
     pub fact_hash: u64,
 }
 
+/// A log that recorded no usage event. `tokens: 0` is then not a measured
+/// share of a parent, and an empty or `Unknown` model is not a live name.
+pub(crate) fn note_unmetered(session: &mut Value, model: &str, metered: bool, total: u64) {
+    if total > 0 || metered {
+        return;
+    }
+    session["usageStatus"] = json!("unavailable");
+    if model.is_empty() || model == "Unknown" {
+        session["model"] = json!("");
+        session["modelName"] = Value::Null;
+    }
+}
+
 impl LogHead {
     pub fn from_log(log: &Log) -> Self {
         let mut head = Self {
@@ -113,6 +130,7 @@ impl LogHead {
             prompts: log.prompts.clone(),
             updated: log.updated.clone(),
             usage: log.usage,
+            metered: !log.messages.is_empty(),
             offset: log.offset,
             length: log.length,
             modified: log.modified,
@@ -169,6 +187,7 @@ impl LogHead {
         self.cwd.hash(&mut hash);
         self.activity_at(None).hash(&mut hash);
         self.usage.total().hash(&mut hash);
+        self.metered.hash(&mut hash);
         self.list_cost.hash(&mut hash);
         self.priced_cost.hash(&mut hash);
         self.unpriced_tokens.hash(&mut hash);
@@ -273,6 +292,9 @@ impl LogHead {
             &Default::default(),
         )
         .json();
+        // No usage event was recorded. The required `tokens: 0` is not a
+        // measured share, and a placeholder model is not a live one.
+        note_unmetered(&mut session, &self.model, self.metered, self.usage.total());
         if self.source == "grok-bot" {
             if let Some(id) = self.id.rsplit(':').next() {
                 session["navigationTarget"] = json!({"kind":"grok-bot-agent","id":id})

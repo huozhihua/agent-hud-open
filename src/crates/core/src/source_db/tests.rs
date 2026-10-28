@@ -431,6 +431,81 @@ fn cursor_sessions_come_from_its_database_and_their_tokens_from_the_turn_log() {
 }
 
 #[test]
+fn cursor_subagent_without_a_turn_log_is_not_a_measured_zero() {
+    use agent_hud_agents::hooks::turn_log;
+    use std::fs;
+    let root = tempfile::tempdir().unwrap();
+    let now = chrono::Utc::now().timestamp_millis();
+    let state = root.path().join("state.vscdb");
+    let db = Connection::open(&state).unwrap();
+    db.execute_batch("CREATE TABLE composerHeaders(composerId TEXT PRIMARY KEY, value TEXT)")
+        .unwrap();
+    let header = |name: &str, at: i64, parent: Option<&str>| {
+        let mut value = json!({
+            "name": name,
+            "createdAt": at - 60_000,
+            "lastUpdatedAt": at - 60_000,
+            "conversationCheckpointLastUpdatedAt": at,
+            "isArchived": false,
+            "workspaceIdentifier": {"uri": {"fsPath": "/repo"}},
+        });
+        if let Some(parent) = parent {
+            value["subagentInfo"] = json!({"parentComposerId": parent});
+        }
+        value.to_string()
+    };
+    db.execute(
+        "INSERT INTO composerHeaders VALUES('parent', ?1), ('child', ?2)",
+        [
+            header("Code quality review", now - 1_000, None),
+            header("Verify CPU", now - 500, Some("parent")),
+        ],
+    )
+    .unwrap();
+    let folder = root.path().join("clients/cursor");
+    fs::create_dir_all(&folder).unwrap();
+    let turn = turn_log::line(&agent_hud_agents::HookEvent {
+        source: "cursor".into(),
+        session_id: "cursor:parent".into(),
+        at_ms: now - 2_000,
+        kind: "completion".into(),
+        data: json!({"turnId": "g1", "model": "grok-4.7", "workspace": "/repo",
+                     "usage": {"input": 100, "output": 10, "read": 600, "write": 0, "reasoning": 0}}),
+    })
+    .unwrap();
+    fs::write(folder.join(turn_log::file_name(now).unwrap()), turn).unwrap();
+    let mut backend = AgentHudCore::new(
+        vec![
+            SourceRoot {
+                path: state,
+                provider: "cursor",
+            },
+            SourceRoot {
+                path: folder,
+                provider: "cursor",
+            },
+        ],
+        root.path().join("hud"),
+    );
+    let totals = refresh(&mut backend);
+    assert_eq!(totals["totals"]["total"], 710, "the child adds nothing");
+    let detail = backend
+        .request("session_detail", json!({"id": "cursor:parent"}))
+        .unwrap();
+    assert_eq!(detail["usage"]["total"], 710);
+    assert_eq!(detail["session"]["model"], "grok-4.7");
+    assert!(detail["session"]["usageStatus"].is_null());
+    let children = detail["children"].as_array().unwrap();
+    assert_eq!(children.len(), 1, "{detail:#}");
+    assert_eq!(children[0]["id"], "cursor:child");
+    assert_eq!(children[0]["parentId"], "cursor:parent");
+    assert_eq!(children[0]["tokens"], 0, "no invented split of the parent");
+    assert_eq!(children[0]["usageStatus"], "unavailable");
+    assert_eq!(children[0]["model"], "");
+    assert!(children[0]["modelName"].is_null());
+}
+
+#[test]
 fn a_completion_for_an_archived_session_puts_no_placeholder_in_its_place() {
     use std::fs;
     let root = tempfile::tempdir().unwrap();

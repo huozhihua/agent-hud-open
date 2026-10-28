@@ -32,6 +32,16 @@ export function PermissionToolCard({
   const denyText = controls.denyText;
   const denyFill = controls.denyFill;
   const denyStroke = controls.denyEdge;
+  const cursorWorkspace = request.source === "cursor";
+  const alwaysLead = cursorWorkspace
+    ? t("In this workspace, Always trusts", "在本工作区，总是允许将信任")
+    : t("Always allow adds", "总是允许会添加");
+  const alwaysTitle = cursorWorkspace
+    ? t(
+        `Saves in Agent HUD for this workspace. Does not write Cursor's allowlist. Trusts ${request.alwaysAllowRule ?? "this call"}.`,
+        `只写入 Agent HUD 的本工作区信任，不会写入 Cursor 允许列表。将信任 ${request.alwaysAllowRule ?? "此次调用"}。`,
+      )
+    : (request.alwaysAllowRule ?? undefined);
 
   return (
     <div style={cardColumn(9)}>
@@ -140,7 +150,7 @@ export function PermissionToolCard({
             style={{ flexShrink: 0 }}
           />
           <span style={{ fontSize: 11, color: secondary, flexShrink: 0 }}>
-            {t("Always allow adds", "总是允许会添加")}
+            {alwaysLead}
           </span>
           <span
             style={{
@@ -185,7 +195,7 @@ export function PermissionToolCard({
           <button
             type="button"
             disabled={disabled}
-            title={request.alwaysAllowRule ?? undefined}
+            title={alwaysTitle}
             onClick={() => void answer({ kind: "always" })}
             style={{
               display: "inline-flex",

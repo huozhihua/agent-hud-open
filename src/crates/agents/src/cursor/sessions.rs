@@ -84,7 +84,9 @@ pub(crate) fn read_at(db: &Connection, cursor: &Value, now_ms: i64) -> rusqlite:
             title: name.map(str::to_owned),
             title_fallback: None,
             cwd: cwd.map(str::to_owned),
-            model: "Unknown".into(),
+            // Headers carry no model. Empty, not "Unknown": a later turn's
+            // model must not be overwritten by this placeholder.
+            model: String::new(),
             key: "header".into(),
             at,
             usage: Usage::default(),
@@ -178,6 +180,10 @@ mod tests {
             .find(|r| r.id == "cursor:child-1")
             .unwrap();
         assert_eq!(child.parent.as_deref(), Some("cursor:parent-1"));
+        assert!(
+            child.model.is_empty() && parent.model.is_empty(),
+            "a header has no model; Unknown is not a live status"
+        );
     }
 
     #[test]

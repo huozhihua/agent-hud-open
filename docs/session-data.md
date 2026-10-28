@@ -55,3 +55,14 @@ use committed local facts and do not start collection or provider requests.
 Local MCP exposes the same queries as `hud_sessions` and `hud_session`. Synthetic
 responses are available only after explicit `--demo`; failures never activate
 sample data.
+
+A child whose own log never recorded a usage event has `usageStatus:
+"unavailable"` and `tokens: 0`. That zero is not a measured share of the
+parent, and the parent total is left as recorded: nothing is split onto the
+child. Cursor sub-agents are the common case. `composerHeaders` names the
+parent via `subagentInfo.parentComposerId`, but the local `stop` hook writes
+the generation's tokens on the parent `conversation_id`. The child composer
+often has no turn-log row, so its usage is not separately available. The
+session page says so and does not draw a 0% bar. Headers also carry no model.
+An unmetered empty or `Unknown` model is left blank on the wire; the page
+shows "—" or, when the parent session has a model, that model.
